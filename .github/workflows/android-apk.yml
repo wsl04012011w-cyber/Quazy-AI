@@ -1,0 +1,73 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build arm64-v8a APK (Vulkan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components and Vulkan shader tools
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.31.6"
+          sudo apt-get update
+          sudo apt-get install -y glslc spirv-headers spirv-tools
+
+      - name: Locate SPIRV-Headers CMake package
+        shell: bash
+        run: |
+          SPIRV_CONFIG="$(find /usr -name 'SPIRV-HeadersConfig.cmake' -o -name 'spirv_headersConfig.cmake' 2>/dev/null | head -n 1)"
+          if [ -z "$SPIRV_CONFIG" ]; then
+            echo "SPIRV-Headers CMake package not found"
+            exit 1
+          fi
+          echo "SPIRV-Headers_DIR=$(dirname "$SPIRV_CONFIG")" >> "$GITHUB_ENV"
+          echo "Using SPIRV-Headers from $(dirname "$SPIRV_CONFIG")"
+
+      - name: Install Gradle
+        shell: bash
+        run: |
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.13/bin" >> "$GITHUB_PATH"
+
+      - name: Build debug APK
+        env:
+          SPIRV-Headers_DIR: ${{ env.SPIRV-Headers_DIR }}
+        run: gradle --no-daemon --stacktrace --max-workers=2 :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quazy-AI-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
