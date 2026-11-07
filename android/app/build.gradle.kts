@@ -6,10 +6,10 @@ plugins {
 react {
     // Gradle's rootProject is the repository root (not an /android folder).
     // Point RNGP explicitly at the React Native project root and its packages.
-    root.set(layout.projectDirectory.dir(".."))
-    reactNativeDir.set(layout.projectDirectory.dir("../node_modules/react-native"))
-    codegenDir.set(layout.projectDirectory.dir("../node_modules/@react-native/codegen"))
-    cliFile.set(layout.projectDirectory.file("../node_modules/react-native/cli.js"))
+    root.set(layout.projectDirectory.dir("../.."))
+    reactNativeDir.set(layout.projectDirectory.dir("../../node_modules/react-native"))
+    codegenDir.set(layout.projectDirectory.dir("../../node_modules/@react-native/codegen"))
+    cliFile.set(layout.projectDirectory.file("../../node_modules/react-native/cli.js"))
     // This app registers its own QuazyPackage directly in QuazyApplication.
     debuggableVariants = emptyList()
 }
