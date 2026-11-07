@@ -1,89 +1,51 @@
 name: Android APK
-
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   build-apk:
-    name: Build arm64-v8a APK (Adreno OpenCL)
+    name: Build arm64-v8a APK (React Native + llama.cpp CPU)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.4"
+      - name: Install React Native dependencies
+        run: npm install --no-audit --no-fund
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-
-      - name: Install Android SDK components and OpenCL build tools
+      - name: Install Android SDK components
         shell: bash
         run: |
           set -euxo pipefail
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.31.6"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.31.6"
           sudo apt-get update
           sudo apt-get install -y ninja-build
-
-      - name: Prepare Khronos OpenCL headers and Android loader
-        shell: bash
-        run: |
-          set -euxo pipefail
-          NDK="$ANDROID_HOME/ndk/27.2.12479018"
-          PREBUILT="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
-          SYSROOT="$PREBUILT/sysroot"
-          CMAKE="$ANDROID_HOME/cmake/3.31.6/bin/cmake"
-
-          git clone --depth 1 https://github.com/KhronosGroup/OpenCL-Headers.git "$RUNNER_TEMP/OpenCL-Headers"
-          mkdir -p "$SYSROOT/usr/include"
-          cp -R "$RUNNER_TEMP/OpenCL-Headers/CL" "$SYSROOT/usr/include/CL"
-
-          git clone --depth 1 https://github.com/KhronosGroup/OpenCL-ICD-Loader.git "$RUNNER_TEMP/OpenCL-ICD-Loader"
-          "$CMAKE" \
-            -S "$RUNNER_TEMP/OpenCL-ICD-Loader" \
-            -B "$RUNNER_TEMP/opencl-icd-build" \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
-            -DOPENCL_ICD_LOADER_HEADERS_DIR="$SYSROOT/usr/include" \
-            -DOPENCL_ICD_LOADER_BUILD_SHARED_LIBS=ON \
-            -DOPENCL_ICD_LOADER_BUILD_TESTING=OFF \
-            -DENABLE_OPENCL_LAYERS=OFF \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-28 \
-            -DANDROID_STL=c++_shared
-
-          "$CMAKE" --build "$RUNNER_TEMP/opencl-icd-build" --target OpenCL --parallel 2
-          mkdir -p "$SYSROOT/usr/lib/aarch64-linux-android"
-          cp -a "$RUNNER_TEMP/opencl-icd-build"/libOpenCL.so* "$SYSROOT/usr/lib/aarch64-linux-android/"
-
-          echo "OPENCL_INCLUDE_DIR=$SYSROOT/usr/include" >> "$GITHUB_ENV"
-          echo "OPENCL_LIBRARY=$SYSROOT/usr/lib/aarch64-linux-android/libOpenCL.so" >> "$GITHUB_ENV"
-
       - name: Install Gradle
         shell: bash
         run: |
           set -euxo pipefail
-          curl -fsSL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.14.3-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /opt
-          echo "/opt/gradle-8.13/bin" >> "$GITHUB_PATH"
-
+          echo "/opt/gradle-8.14.3/bin" >> "$GITHUB_PATH"
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace --max-workers=2 :app:assembleDebug
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

@@ -6,6 +6,15 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import com.facebook.react.PackageList
+import com.facebook.react.ReactApplication
+import com.facebook.react.ReactHost
+import com.facebook.react.ReactNativeHost
+import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
+import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+import com.facebook.react.defaults.DefaultReactNativeHost
+import com.facebook.soloader.OpenSourceMergedSoMapping
+import com.facebook.soloader.SoLoader
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -14,16 +23,24 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-/** Captures startup logs and persists uncaught crashes for export on next launch. */
-class QuazyApplication : Application() {
+class QuazyApplication : Application(), ReactApplication {
+    override val reactNativeHost: ReactNativeHost =
+        object : DefaultReactNativeHost(this) {
+            override fun getPackages() = PackageList(this).packages.apply { add(QuazyPackage()) }
+            override fun getJSMainModuleName(): String = "index"
+            override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+            override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+            override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
+        }
+    override val reactHost: ReactHost
+        get() = getDefaultReactHost(applicationContext, reactNativeHost)
     private lateinit var diagnosticsDir: File
-    private lateinit var sessionLog: File
 
     override fun onCreate() {
         super.onCreate()
+        SoLoader.init(this, OpenSourceMergedSoMapping)
+        if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) load()
         diagnosticsDir = File(filesDir, "diagnostics").apply { mkdirs() }
-
-        // This runs before MainActivity and before the lazy JNI bridge is loaded.
         val report = buildString {
             appendLine("QUAZY AI DIAGNOSTICS")
             appendLine("Captured: " + Date())
@@ -33,48 +50,30 @@ class QuazyApplication : Application() {
             appendLine("ABI: " + Build.SUPPORTED_ABIS.joinToString())
             appendLine()
             appendLine("========== PREVIOUS JAVA/KOTLIN CRASH ==========")
-            val previousCrash = File(diagnosticsDir, "last_crash.txt")
-            if (previousCrash.exists()) appendLine(previousCrash.readText())
-            else appendLine("No saved Java/Kotlin crash from previous launch.")
+            val crash = File(diagnosticsDir, "last_crash.txt")
+            if (crash.exists()) appendLine(crash.readText()) else appendLine("No saved Java/Kotlin crash from previous launch.")
             appendLine()
             appendLine("========== PREVIOUS CRASH LOGCAT ==========")
-            val previousLogcat = File(diagnosticsDir, "crash_logcat.txt")
-            if (previousLogcat.exists()) appendLine(previousLogcat.readText())
+            val oldLog = File(diagnosticsDir, "crash_logcat.txt")
+            if (oldLog.exists()) appendLine(oldLog.readText())
             appendLine()
             appendLine("========== CURRENT STARTUP LOGCAT (best effort) ==========")
             appendLine(readLogcat())
         }
-
         val reportFile = File(diagnosticsDir, "QuazyAI-diagnostics-" + timestamp() + ".txt")
-        runCatching { reportFile.writeText(report) }
-            .onFailure { Log.e(TAG, "Could not save diagnostics report", it) }
-
-        // Export immediately, before any Activity/native initialization.
+        runCatching { reportFile.writeText(report) }.onFailure { Log.e(TAG, "Could not save diagnostics", it) }
         val exported = runCatching { exportToDownloads(reportFile) }
-            .onFailure { Log.e(TAG, "Could not export diagnostics to Downloads", it) }
-            .getOrNull()
-
-        sessionLog = File(diagnosticsDir, "current_session.log")
-        runCatching {
-            sessionLog.writeText("Session started: " + Date() + "\nDevice: " +
-                Build.MANUFACTURER + " " + Build.MODEL + "\n")
-        }
+            .onFailure { Log.e(TAG, "Could not export diagnostics", it) }.getOrNull()
         installCrashHandler()
-
-        Log.i(TAG, if (exported != null) "Diagnostics exported: " + exported
-            else "Diagnostics saved internally: " + reportFile.absolutePath)
+        Log.i(TAG, if (exported != null) "Diagnostics exported: " + exported else "Diagnostics saved internally.")
     }
 
     private fun installCrashHandler() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             runCatching {
-                val stack = StringWriter().also { writer ->
-                    throwable.printStackTrace(PrintWriter(writer))
-                }.toString()
-                File(diagnosticsDir, "last_crash.txt").writeText(
-                    "CRASH TIME: " + Date() + "\nTHREAD: " + thread.name + "\n" + stack
-                )
+                val stack = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }.toString()
+                File(diagnosticsDir, "last_crash.txt").writeText("CRASH TIME: " + Date() + "\nTHREAD: " + thread.name + "\n" + stack)
                 File(diagnosticsDir, "crash_logcat.txt").writeText(readLogcat())
                 Log.e(TAG, "Uncaught exception on " + thread.name, throwable)
             }
@@ -86,16 +85,13 @@ class QuazyApplication : Application() {
         }
     }
 
-    private fun readLogcat(): String {
-        return try {
-            val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "2500")
-                .redirectErrorStream(true).start()
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            process.waitFor(4, TimeUnit.SECONDS)
-            output.ifBlank { "No readable logcat entries (Android may restrict access)." }
-        } catch (error: Throwable) {
-            "Unable to read logcat: " + error.javaClass.simpleName + ": " + error.message
-        }
+    private fun readLogcat(): String = try {
+        val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "-t", "2500").redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        process.waitFor(4, TimeUnit.SECONDS)
+        output.ifBlank { "No readable logcat entries (Android may restrict access)." }
+    } catch (error: Throwable) {
+        "Unable to read logcat: " + error.javaClass.simpleName + ": " + error.message
     }
 
     private fun exportToDownloads(source: File): String {
@@ -113,25 +109,19 @@ class QuazyApplication : Application() {
                 contentResolver.openOutputStream(uri)?.use { output ->
                     source.inputStream().use { input -> input.copyTo(output) }
                 } ?: error("Could not open Downloads output stream")
-                val completed = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
-                contentResolver.update(uri, completed, null, null)
+                val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+                contentResolver.update(uri, done, null, null)
                 return "Downloads/QuazyAI/" + name
             } catch (error: Throwable) {
                 contentResolver.delete(uri, null, null)
                 throw error
             }
         }
-
-        // Android 9 fallback: app-specific Downloads, avoiding a permission prompt.
         val fallback = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: File(filesDir, "Downloads")
         fallback.mkdirs()
-        val destination = File(fallback, name)
-        source.copyTo(destination, overwrite = true)
-        return destination.absolutePath
+        return source.copyTo(File(fallback, name), overwrite = true).absolutePath
     }
 
-    private fun timestamp(): String =
-        SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-
+    private fun timestamp(): String = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
     companion object { private const val TAG = "QuazyDiagnostics" }
 }

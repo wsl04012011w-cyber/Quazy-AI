@@ -1,25 +1,22 @@
 # Quazy AI
 
-Aplicativo Android de inferência local com [llama.cpp](https://github.com/ggml-org/llama.cpp).
+Aplicativo Android de inferência local com interface React Native e motor [llama.cpp](https://github.com/ggml-org/llama.cpp) em C++/JNI.
 
 ## Estado atual
 
-- Interface Android nativa básica com conversa, seleção de modelo GGUF e botão de envio.
-- Contadores de tokens de prompt e de geração lidos de \`llama_perf_context()\`.
-- Runtime C++ integrado por JNI.
-- Build \`arm64-v8a\` com OpenCL 2.0 e kernels otimizados para Adreno, além de fallback CPU com KleidiAI.
-- O modelo é escolhido pelo usuário no armazenamento do aparelho; nenhum modelo é incluído no APK.
+- Interface React Native com tema claro, conversa, seletor GGUF e campo de mensagem.
+- Motor llama.cpp continua nativo em C++ via JNI; React Native controla apenas a interface.
+- Contadores de tokens obtidos de \`llama_perf_context()\`.
+- Build \`arm64-v8a\` para Android 9 ou superior.
+- Diagnóstico exportado automaticamente para \`Downloads/QuazyAI\` ao iniciar.
+- Build CPU-only nesta revisão: OpenCL foi desativado porque os logs do aparelho mostraram que \`libOpenCL.so\` não está disponível para o app.
 
 ## Build
 
 O GitHub Actions gera um APK de teste em cada push para \`main\`. Consulte a aba **Actions** e baixe o artefato \`Quazy-AI-debug-apk\`.
 
-O build fixa o llama.cpp em \`b12189\`. Instruções e notas de compatibilidade: [docs/ANDROID_BUILD.md](docs/ANDROID_BUILD.md).
+O build fixa o llama.cpp em \`b12189\`. Dependências React Native estão descritas em \`package.json\`.
 
-## Snapdragon 6 Gen 3
+## Aceleração
 
-A configuração prioriza OpenCL 2.0/Adreno porque a ficha do Snapdragon 6 Gen 3 informa OpenCL 2.0 e Vulkan 1.1, enquanto o backend Vulkan desta versão do llama.cpp requer Vulkan 1.2. A aceleração OpenCL no Adreno 710 ainda precisa ser confirmada no aparelho físico; o fallback CPU permanece disponível.
-
-## Modelos de baixa quantização
-
-O app não reescreve tensores GGUF nem altera kernels de quantização. O suporte a cada formato depende da revisão fixada do llama.cpp e do backend selecionado. A proteção de memória reduz riscos, mas não impede encerramentos forçados pelo Android ou falhas do driver.
+Esta versão prioriza estabilidade e carregamento de modelos com CPU. A aceleração por GPU não é anunciada como ativa. O backend OpenCL anterior falhava no aparelho por dependência ausente do driver; um backend de GPU deverá ser reintroduzido apenas depois de validar a disponibilidade e a compatibilidade no dispositivo físico.

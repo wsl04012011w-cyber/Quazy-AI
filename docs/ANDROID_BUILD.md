@@ -2,42 +2,33 @@
 
 ## Build target
 
+- React Native: 0.81.5.
 - Android application: \`com.quazy.ai\`.
 - Native ABI: \`arm64-v8a\`.
 - Minimum Android API: 28.
+- Compile / target SDK: 36.
 - NDK: 27.2.12479018.
 - llama.cpp source: tag \`b12189\`.
-- Backends: OpenCL 2.0 with Adreno-optimized kernels; KleidiAI CPU kernels as fallback.
+- Backend: CPU with KleidiAI where supported.
 
-The GitHub Actions workflow builds Khronos OpenCL-Headers and the OpenCL ICD loader for Android, then places their headers and link library in the NDK sysroot before building the app. The loader is a link-time dependency; the actual OpenCL implementation is supplied by the device vendor.
+## OpenCL crash diagnosis
 
-## Snapdragon 6 Gen 3 / Adreno
+The supplied Android 16 log shows:
 
-Qualcomm's product brief lists OpenCL 2.0 and Vulkan 1.1 for Snapdragon 6 Gen 3. The Vulkan backend in the pinned llama.cpp revision checks for Vulkan 1.2, so this build selects OpenCL instead.
+\`UnsatisfiedLinkError: dlopen failed: library "libOpenCL.so" not found\`
 
-The upstream llama.cpp OpenCL backend is designed for Qualcomm Adreno and documents Android validation on selected Snapdragon devices, but not specifically the Snapdragon 6 Gen 3 / Adreno 710. Therefore the APK build proves that the backend compiles; it does not certify that this phone's OpenCL driver can run it. Device testing is required. If the vendor OpenCL library or a required kernel is unavailable, the app may fall back to CPU or report a model-load failure.
+The error originates while Android loads \`libggml-opencl.so\` as a dependency of \`libquazy_jni.so\`. This is a runtime linker failure, not a malformed GGUF. The OpenCL ICD loader was available at build/link time, but the vendor implementation is not visible in the app's linker namespace. The build therefore disables OpenCL and Vulkan for now, leaving llama.cpp's CPU backend.
 
-The app requests 24 GPU layers initially and retries with fewer layers, then CPU, if model/context creation reports an error. The displayed number is the requested offload value, not a hardware benchmark.
+## React Native UI
 
-## Large and low-bit GGUF models
+The chat screen is implemented in \`App.js\`. It calls the Kotlin \`QuazyNative\` module for file selection, model loading, generation, token stats and model release. Model inference remains in C++ through JNI; no inference is moved into JavaScript.
 
-The app does not modify quantization kernels or rewrite GGUF tensors. It delegates model-format support to the pinned upstream llama.cpp version. The OpenCL backend documents support for selected low-bit types, but the exact quantization in a model such as a 4B one-bit variant must be checked against the backend's supported operations; unsupported operations may run on CPU or fail.
+The debug APK bundles the JS entry point so it can be installed and opened without a Metro development server.
 
-To lower memory pressure, the first version:
-- uses memory mapping and does not request memory locking;
-- pre-checks file size against currently available system memory;
-- starts with context size 2048, batch 256 and micro-batch 128;
-- caps requested GPU layers and retries with fewer layers and then CPU;
-- performs loading/inference off the UI thread and reports returned errors.
+## Model loading and memory
 
-Android or a GPU driver can still terminate a process under severe memory pressure or an internal native-driver fault. No C++ exception handler can guarantee recovery from SIGKILL, process aborts or a device-driver reset. These safeguards reduce risk; physical-device testing remains necessary.
+The app copies the selected document into its private cache before calling llama.cpp. The JNI loader checks available memory, starts with context size 2048 and attempts CPU model loading. Large GGUF models may still exceed the available RAM or be terminated by Android.
 
-## Token counters
+## Diagnostics
 
-After each response, the JNI bridge resets and reads \`llama_perf_context()\`, displaying \`n_p_eval\` (prompt tokens) and \`n_eval\` (generated tokens) for that request. Counts are supplied by llama.cpp, not estimated from characters.
-
-## Manual build
-
-Install JDK 17, Android SDK 35, NDK 27.2.12479018, CMake 3.31.6 and Ninja. The workflow additionally prepares OpenCL-Headers and OpenCL-ICD-Loader for the Android arm64 sysroot, then runs \`:app:assembleDebug\`.
-
-The GitHub Actions workflow publishes a debug APK artifact named \`Quazy-AI-debug-apk\`.
+At startup, the app writes a report to internal app storage and tries to export it to \`Downloads/QuazyAI\`. Uncaught Java/Kotlin exceptions are saved and included on the next launch. Native process aborts and driver failures may not be captured by the Java exception handler.

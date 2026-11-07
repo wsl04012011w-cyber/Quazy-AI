@@ -1,24 +1,23 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.facebook.react")
 }
-
+react {
+    debuggableVariants = emptyList()
+    autolinkLibrariesWithApp()
+}
 android {
     namespace = "com.quazy.ai"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.2.12479018"
-
     defaultConfig {
         applicationId = "com.quazy.ai"
         minSdk = 28
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
-
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
-
+        targetSdk = 36
+        versionCode = 2
+        versionName = "0.2.0"
+        ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++17")
@@ -26,7 +25,6 @@ android {
             }
         }
     }
-
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -34,32 +32,26 @@ android {
         }
         release {
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
-
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.31.6"
         }
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-        }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures { buildConfig = true }
+    packaging { jniLibs { useLegacyPackaging = true } }
+}
+dependencies {
+    implementation("com.facebook.react:react-android")
+    if (providers.gradleProperty("hermesEnabled").orNull == "true") {
+        implementation("com.facebook.react:hermes-android")
     }
 }
