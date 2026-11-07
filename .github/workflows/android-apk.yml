@@ -45,11 +45,11 @@ jobs:
           unzip -q /tmp/gradle.zip -d /opt
           echo "/opt/gradle-8.14.3/bin" >> "$GITHUB_PATH"
       - name: Build debug APK
-        run: gradle --no-daemon --stacktrace --max-workers=2 :app:assembleDebug
+        run: gradle --no-daemon --stacktrace --max-workers=2 -p android :app:assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Quazy-AI-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14

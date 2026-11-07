@@ -8,6 +8,7 @@ Aplicativo Android de inferência local com interface React Native e motor [llam
 - Motor llama.cpp continua nativo em C++ via JNI; React Native controla apenas a interface.
 - Contadores de tokens obtidos de \`llama_perf_context()\`.
 - Build \`arm64-v8a\` para Android 9 ou superior.
+- Projeto Android organizado em \`android/\`, com o código JavaScript/React Native na raiz.
 - Diagnóstico exportado automaticamente para \`Downloads/QuazyAI\` ao iniciar.
 - Build CPU-only nesta revisão: OpenCL foi desativado porque os logs do aparelho mostraram que \`libOpenCL.so\` não está disponível para o app.
 

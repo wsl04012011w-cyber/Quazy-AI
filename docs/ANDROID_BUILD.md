@@ -10,6 +10,7 @@
 - NDK: 27.2.12479018.
 - llama.cpp source: tag \`b12189\`.
 - Backend: CPU with KleidiAI where supported.
+- Gradle project: \`android/\`; React Native package and JavaScript entry point: repository root.
 
 ## OpenCL crash diagnosis
 
@@ -23,7 +24,7 @@ The error originates while Android loads \`libggml-opencl.so\` as a dependency o
 
 The chat screen is implemented in \`App.js\`. It calls the Kotlin \`QuazyNative\` module for file selection, model loading, generation, token stats and model release. Model inference remains in C++ through JNI; no inference is moved into JavaScript.
 
-The debug APK bundles the JS entry point so it can be installed and opened without a Metro development server.
+The debug APK bundles the JS entry point and disables Metro DevSupport, so it can be installed and opened without a Metro development server.
 
 ## Model loading and memory
 
