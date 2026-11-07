@@ -45,7 +45,34 @@ jobs:
       - name: Locate SPIRV-Headers CMake package
         shell: bash
         run: |
-          SPIRV_CONFIG="$(find /usr -name 'SPIRV-HeadersConfig.cmake' -o -name 'spirv_headersConfig.cmake' 2>/dev/null | head -n 1)"
+          SPIRV_CONFIG="$(dpkg -L spirv-headers | grep -E '/(SPIRV-HeadersConfig|spirv_headersConfig)\\.cmake          if [ -z "$SPIRV_CONFIG" ]; then
+            echo "SPIRV-Headers CMake package not found"
+            exit 1
+          fi
+          echo "SPIRV_HEADERS_DIR=$(dirname "$SPIRV_CONFIG")" >> "$GITHUB_ENV"
+          echo "Using SPIRV-Headers from $(dirname "$SPIRV_CONFIG")"
+
+      - name: Install Gradle
+        shell: bash
+        run: |
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.13/bin" >> "$GITHUB_PATH"
+
+      - name: Build debug APK
+        run: gradle --no-daemon --stacktrace --max-workers=2 :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quazy-AI-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+ | head -n 1 || true)"
+          if [ -z "$SPIRV_CONFIG" ]; then
+            SPIRV_CONFIG="$(find /usr/share/cmake /usr/lib -name 'SPIRV-HeadersConfig.cmake' -o -name 'spirv_headersConfig.cmake' 2>/dev/null | head -n 1)"
+          fi
           if [ -z "$SPIRV_CONFIG" ]; then
             echo "SPIRV-Headers CMake package not found"
             exit 1
