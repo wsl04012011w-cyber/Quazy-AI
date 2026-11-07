@@ -22,7 +22,7 @@ import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
-    private val bridge = NativeBridge()
+    private val bridge by lazy { NativeBridge() }
 
     private lateinit var statusView: TextView
     private lateinit var tokenView: TextView
