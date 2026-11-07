@@ -1,5 +1,5 @@
 pluginManagement {
-    includeBuild("../node_modules/@react-native/gradle-plugin")
+    includeBuild("node_modules/@react-native/gradle-plugin")
     repositories {
         google()
         mavenCentral()
@@ -19,4 +19,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "QuazyAI"
 include(":app")
-includeBuild("../node_modules/@react-native/gradle-plugin")
+includeBuild("node_modules/@react-native/gradle-plugin")
