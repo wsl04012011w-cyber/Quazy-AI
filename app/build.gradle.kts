@@ -4,8 +4,9 @@ plugins {
     id("com.facebook.react")
 }
 react {
+    // This app has no third-party native RN packages to autolink.
+    // Our local QuazyPackage is registered directly in QuazyApplication.
     debuggableVariants = emptyList()
-    autolinkLibrariesWithApp()
 }
 android {
     namespace = "com.quazy.ai"
