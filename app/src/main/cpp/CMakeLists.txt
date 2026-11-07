@@ -22,6 +22,10 @@ set(GGML_VULKAN ON CACHE BOOL "" FORCE)
 set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
 set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
 
+if(DEFINED ENV{SPIRV_HEADERS_DIR} AND NOT "$ENV{SPIRV_HEADERS_DIR}" STREQUAL "")
+    set("SPIRV-Headers_DIR" "$ENV{SPIRV_HEADERS_DIR}" CACHE PATH "" FORCE)
+endif()
+
 FetchContent_Declare(
     llama_cpp
     GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
