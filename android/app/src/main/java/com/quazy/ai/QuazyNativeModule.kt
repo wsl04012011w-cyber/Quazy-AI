@@ -22,7 +22,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
     private var pickerPromise: Promise? = null
 
     private val activityListener: ActivityEventListener = object : BaseActivityEventListener() {
-        override fun onActivityResult(activity: Activity?, requestCode: Int, resultCode: Int, data: Intent?) {
+        override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
             if (requestCode != REQUEST_MODEL) return
             val promise = pickerPromise ?: return
             pickerPromise = null
@@ -45,7 +45,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
 
     @ReactMethod
     fun pickAndLoadModel(promise: Promise) {
-        val activity = currentActivity
+        val activity = context.currentActivity
         if (activity == null) {
             promise.reject("E_NO_ACTIVITY", "A tela do app não está disponível.")
             return
