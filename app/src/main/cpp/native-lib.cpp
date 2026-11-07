@@ -104,8 +104,8 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
 
             llama_model_params model_params = llama_model_default_params();
             model_params.n_gpu_layers = layers;
-            model_params.use_mmap = true;
-            model_params.use_mlock = false;
+            model_params.load_mode = LLAMA_LOAD_MODE_MMAP;
+            model_params.lazy_mode = LLAMA_LAZY_MODE_OFF;
 
             QLOGE("Loading GGUF with n_gpu_layers=%d", layers);
             g_model = llama_model_load_from_file(path.c_str(), model_params);
