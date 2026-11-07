@@ -5,30 +5,21 @@ Aplicativo Android de inferência local com [llama.cpp](https://github.com/ggml-
 ## Estado atual
 
 - Interface Android nativa básica com conversa, seleção de modelo GGUF e botão de envio.
-- Contadores de tokens de prompt e de geração lidos de `llama_perf_context()`.
+- Contadores de tokens de prompt e de geração lidos de \`llama_perf_context()\`.
 - Runtime C++ integrado por JNI.
-- Build para `arm64-v8a`, com backend Vulkan habilitado e fallback de CPU.
+- Build \`arm64-v8a\` com OpenCL 2.0 e kernels otimizados para Adreno, além de fallback CPU com KleidiAI.
 - O modelo é escolhido pelo usuário no armazenamento do aparelho; nenhum modelo é incluído no APK.
 
 ## Build
 
-O GitHub Actions gera um APK de teste em cada push para `main`. Consulte a aba **Actions** e baixe o artefato `Quazy-AI-debug-apk).
+O GitHub Actions gera um APK de teste em cada push para \`main\`. Consulte a aba **Actions** e baixe o artefato \`Quazy-AI-debug-apk\`.
 
-O build usa o NDK Android e fixa o llama.cpp em `b12189` para que o resultado seja reproduzível. Instruções adicionais: [docs/ANDROID_BUILD.md](docs/ANDROID_BUILD.md).
+O build fixa o llama.cpp em \`b12189\`. Instruções e notas de compatibilidade: [docs/ANDROID_BUILD.md](docs/ANDROID_BUILD.md).
 
-## Limitações desta versão
+## Snapdragon 6 Gen 3
 
-A aceleração Vulkan depende de um driver Vulkan funcional no aparelho. O Snapdragon 6 Gen 3 anuncia Vulkan 1.1; ainda assim, o comportamento do driver Adreno precisa ser validado no dispositivo físico. Se o carregamento com offload não funcionar, o runtime tenta reduzir as camadas na GPU e, por último, usar CPU.
+A configuração prioriza OpenCL 2.0/Adreno porque a ficha do Snapdragon 6 Gen 3 informa OpenCL 2.0 e Vulkan 1.1, enquanto o backend Vulkan desta versão do llama.cpp requer Vulkan 1.2. A aceleração OpenCL no Adreno 710 ainda precisa ser confirmada no aparelho físico; o fallback CPU permanece disponível.
 
-O pré-check de memória e os limites conservadores reduzem a chance de encerramento ao abrir modelos grandes, mas nenhum aplicativo consegue interceptar com garantia um encerramento forçado pelo Android ou pelo driver. O suporte a cada quantização GGUF continua dependendo da versão do llama.cpp selecionada.
+## Modelos de baixa quantização
 
-## Estrutura
-
-```
-app/
-  src/main/
-    cpp/                 # CMake + JNI + llama.cpp
-    java/com/quazy/ai/   # interface Android
-.github/workflows/       # build automático de APK
-docs/                    # instruções e decisões técnicas
-```
+O app não reescreve tensores GGUF nem altera kernels de quantização. O suporte a cada formato depende da revisão fixada do llama.cpp e do backend selecionado. A proteção de memória reduz riscos, mas não impede encerramentos forçados pelo Android ou falhas do driver.

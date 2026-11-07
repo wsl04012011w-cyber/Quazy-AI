@@ -22,7 +22,7 @@ llama_context * g_context = nullptr;
 bool g_backend_initialized = false;
 int32_t g_prompt_tokens = 0;
 int32_t g_generated_tokens = 0;
-int32_t g_gpu_layers_used = 0;
+int32_t g_gpu_layers_requested = 0;
 std::string g_last_error;
 
 std::string from_jstring(JNIEnv * env, jstring value) {
@@ -49,7 +49,7 @@ void release_model_locked() {
     }
     g_prompt_tokens = 0;
     g_generated_tokens = 0;
-    g_gpu_layers_used = 0;
+    g_gpu_layers_requested = 0;
 }
 
 std::string load_error(const char * message) {
@@ -123,10 +123,10 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
             g_context = llama_init_from_model(g_model, context_params);
 
             if (g_context != nullptr) {
-                g_gpu_layers_used = layers;
+                g_gpu_layers_requested = layers;
                 g_last_error.clear();
                 return to_jstring(env, "OK:Modelo carregado • camadas GPU solicitadas: " +
-                    std::to_string(g_gpu_layers_used) + " • contexto: " + std::to_string(ctx_size));
+                    std::to_string(g_gpu_layers_requested) + " • contexto: " + std::to_string(ctx_size));
             }
 
             llama_model_free(g_model);
@@ -159,6 +159,7 @@ Java_com_quazy_ai_NativeBridge_nativeGenerate(
     if (prompt.empty()) return to_jstring(env, "Digite uma mensagem antes de enviar.");
 
     try {
+        llama_perf_context_reset(g_context);
         llama_memory_clear(llama_get_memory(g_context), true);
         const llama_vocab * vocab = llama_model_get_vocab(g_model);
 
@@ -236,8 +237,8 @@ Java_com_quazy_ai_NativeBridge_nativeTokenStats(JNIEnv * env, jobject) {
     std::lock_guard<std::mutex> lock(g_mutex);
     return to_jstring(env, "Tokens do llama.cpp • prompt " +
         std::to_string(g_prompt_tokens) + " • gerados " +
-        std::to_string(g_generated_tokens) + " • GPU layers " +
-        std::to_string(g_gpu_layers_used));
+        std::to_string(g_generated_tokens) + " • GPU layers requested " +
+        std::to_string(g_gpu_layers_requested));
 }
 
 extern "C" JNIEXPORT void JNICALL
