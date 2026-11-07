@@ -6,10 +6,6 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-plugins { id("com.facebook.react.settings") }
-extensions.configure<com.facebook.react.ReactSettingsExtension> {
-    autolinkLibrariesFromCommand()
-}
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
