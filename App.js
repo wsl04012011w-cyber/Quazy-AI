@@ -165,20 +165,29 @@ export default function App() {
   const importModel = async () => {
     if (busy) return;
     setBusy(true);
-    setStatus('Importando GGUF para a biblioteca local…');
+    setStatus('Escolha o arquivo GGUF…');
+    let importedName;
     try {
-      const name = await Native.pickAndImportModel();
-      if (name === 'CANCELLED') {
+      importedName = await Native.pickAndImportModel();
+      if (importedName === 'CANCELLED') {
         setStatus('Importação cancelada.');
         return;
       }
       await refreshModels();
-      setStatus('Modelo salvo na biblioteca. Carregando…');
-      await loadModelDirect(name);
+      setStatus('GGUF copiado para a biblioteca. Iniciando engine…');
+    } catch (error) {
+      const reason = error?.message || 'O Android não conseguiu copiar o arquivo escolhido.';
+      setStatus('Falha ao copiar GGUF: ' + reason);
+      Alert.alert('Falha na cópia do GGUF', reason);
+      return;
+    }
+    try {
+      await loadModelDirect(importedName);
       setSettingsOpen(false);
     } catch (error) {
-      setStatus(error?.message || 'Falha ao importar o modelo.');
-      Alert.alert('Falha ao importar modelo', error?.message || 'O arquivo não pôde ser copiado.');
+      const reason = error?.message || 'O llama.cpp não conseguiu carregar o modelo.';
+      setStatus('Arquivo copiado, mas a engine não carregou: ' + reason);
+      Alert.alert('GGUF copiado; falha ao carregar', reason);
     } finally {
       setBusy(false);
     }

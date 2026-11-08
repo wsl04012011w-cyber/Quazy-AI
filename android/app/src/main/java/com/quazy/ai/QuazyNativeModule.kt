@@ -65,7 +65,9 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/octet-stream"
+                // GGUF MIME types vary between Android document providers.
+                // Accept any file here; extension and GGUF magic are validated after selection.
+                type = "*/*"
             }
             activity.startActivityForResult(intent, REQUEST_MODEL)
         } catch (error: Throwable) {
