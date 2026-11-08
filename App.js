@@ -41,6 +41,98 @@ const DEFAULT_SETTINGS = {
   repeatPenalty: 1.05,
 };
 
+const THOUGHT_TAG_PATTERN = /(?:think|analys|reason|thought|scratch|reflect|deliberat|internal|cognit|rationale|chain.?of.?thought|justify|brainstorm|planning|plan|work)/i;
+const FINAL_TAG_PATTERN = /^(?:final|answer|response|output)$/i;
+
+function parseAssistantOutput(rawText) {
+  const raw = String(rawText || '');
+  const thinkingParts = [];
+  const answerParts = [];
+  let mode = 'answer';
+  let hasThinking = false;
+  let thinkingOpen = false;
+  let cursor = 0;
+
+  const append = value => {
+    if (!value) return;
+    (mode === 'thinking' ? thinkingParts : answerParts).push(value);
+  };
+
+  // Supports XML-like tags (<think>, <Thinking>, <analysis>, <reasoning>...),
+  // common reasoning tokens and Harmony-style channel markers.
+  const markerPattern = /<\\|(?:begin_of_thought|start_of_thought|startofthought)\\|>|<\\|(?:end_of_thought|endofthought|end_thought)\\|>|<\\|channel\\|>\\s*(analysis|final|commentary|justify|confidence|summary)\\b|<\\|(analysis|final|commentary)\\|>|<\\/?([a-z][a-z0-9_-]*)\\s*>/gi;
+
+  let match;
+  while ((match = markerPattern.exec(raw)) !== null) {
+    append(raw.slice(cursor, match.index));
+    cursor = markerPattern.lastIndex;
+    const marker = match[0].toLowerCase();
+
+    if (/^<\\|(?:begin_of_thought|start_of_thought|startofthought)\\|>$/.test(marker)) {
+      mode = 'thinking';
+      hasThinking = true;
+      thinkingOpen = true;
+      continue;
+    }
+    if (/^<\\|(?:end_of_thought|endofthought|end_thought)\\|>$/.test(marker)) {
+      mode = 'answer';
+      thinkingOpen = false;
+      continue;
+    }
+
+    const channel = (match[1] || match[2] || '').toLowerCase();
+    if (channel) {
+      if (THOUGHT_TAG_PATTERN.test(channel) || channel === 'commentary' || channel === 'confidence' || channel === 'summary') {
+        mode = 'thinking';
+        hasThinking = true;
+        thinkingOpen = true;
+      } else {
+        mode = 'answer';
+        thinkingOpen = false;
+      }
+      continue;
+    }
+
+    const tagName = (match[3] || '').toLowerCase();
+    if (!tagName) continue;
+    if (THOUGHT_TAG_PATTERN.test(tagName)) {
+      hasThinking = true;
+      if (marker.startsWith('</')) {
+        mode = 'answer';
+        thinkingOpen = false;
+      } else {
+        mode = 'thinking';
+        thinkingOpen = true;
+      }
+      continue;
+    }
+    if (FINAL_TAG_PATTERN.test(tagName)) {
+      mode = 'answer';
+      thinkingOpen = false;
+      continue;
+    }
+
+    // Unknown markup is ordinary model text; keep it rather than deleting it.
+    append(match[0]);
+  }
+
+  let tail = raw.slice(cursor);
+  // A tag can arrive split across tokens. Hold an unfinished marker until the
+  // next streaming chunk so fragments such as "<thi" never flash in the chat.
+  const partialMarker = tail.lastIndexOf('<');
+  if (partialMarker >= 0 && /^<\\/?[a-z0-9_:-]*$/i.test(tail.slice(partialMarker))) {
+    tail = tail.slice(0, partialMarker);
+  }
+  append(tail);
+
+  return {
+    hasThinking,
+    thinking: thinkingParts.join('').trim(),
+    answer: answerParts.join('').trimStart(),
+    thinkingOpen,
+  };
+}
+
 function formatSize(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return 'Tamanho desconhecido';
   if (bytes >= 1024 ** 3) return (bytes / (1024 ** 3)).toFixed(2) + ' GB';
@@ -54,6 +146,8 @@ export default function App() {
   const [modelReady, setModelReady] = useState(false);
   const [modelName, setModelName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [settingsReady, setSettingsReady] = useState(false);
@@ -152,7 +246,7 @@ export default function App() {
     setStatus('Carregando modelo da biblioteca do app…');
     try {
       await loadModelDirect(name);
-      setSettingsOpen(false);
+      setModelsOpen(false);
     } catch (error) {
       setModelReady(false);
       setStatus(error?.message || 'Falha ao carregar o modelo.');
@@ -183,7 +277,7 @@ export default function App() {
     }
     try {
       await loadModelDirect(importedName);
-      setSettingsOpen(false);
+      setModelsOpen(false);
     } catch (error) {
       const reason = error?.message || 'O llama.cpp não conseguiu carregar o modelo.';
       setStatus('Arquivo copiado, mas a engine não carregou: ' + reason);
@@ -272,6 +366,8 @@ export default function App() {
     if (busy) return;
     setMessages([]);
     setTokenStats('');
+    setMenuOpen(false);
+    setModelsOpen(false);
     setSettingsOpen(false);
   };
 
@@ -294,15 +390,10 @@ export default function App() {
     }
 
     const raw = item.text || '';
-    const openThink = raw.indexOf('<think>');
-    const closeThink = openThink >= 0 ? raw.indexOf('</think>', openThink + 7) : -1;
-    const hasThinking = openThink >= 0;
-    const thinking = hasThinking
-      ? raw.slice(openThink + 7, closeThink >= 0 ? closeThink : raw.length).trim()
-      : '';
-    const answer = hasThinking
-      ? (closeThink >= 0 ? raw.slice(closeThink + 8) : '')
-      : raw;
+    const parsed = parseAssistantOutput(raw);
+    const hasThinking = parsed.hasThinking;
+    const thinking = parsed.thinking;
+    const answer = parsed.answer;
     const showThinking = Boolean(item.thinkingExpanded);
 
     return (
@@ -319,7 +410,7 @@ export default function App() {
             >
               <Text style={s.thinkingChevron}>{showThinking ? '⌄' : '›'}</Text>
               <Text style={s.thinkingTitle}>Pensamento</Text>
-              {item.streaming && closeThink < 0 && <ActivityIndicator size="small" color="#8A85C9" />}
+              {item.streaming && parsed.thinkingOpen && <ActivityIndicator size="small" color="#8A85C9" />}
             </Pressable>
             {showThinking && Boolean(thinking) && (
               <Text style={s.thinkingText}>{thinking}</Text>
@@ -357,7 +448,7 @@ export default function App() {
             <Text style={s.subtitle}>{modelReady ? 'Modelo local pronto' : 'Assistente local'}</Text>
           </View>
         </View>
-        <Pressable onPress={() => setSettingsOpen(true)} style={s.menuButton} accessibilityLabel="Abrir configurações">
+        <Pressable onPress={() => setMenuOpen(true)} style={s.menuButton} accessibilityLabel="Abrir configurações">
           <Text style={s.menuGlyph}>•••</Text>
         </Pressable>
       </View>
@@ -385,7 +476,7 @@ export default function App() {
                 : 'Importe um GGUF. Ele ficará guardado na biblioteca do Quazy AI para os próximos usos.'}
             </Text>
             {!modelReady && (
-              <Pressable onPress={() => setSettingsOpen(true)} style={s.emptyButton}>
+              <Pressable onPress={() => setModelsOpen(true)} style={s.emptyButton}>
                 <Text style={s.emptyButtonText}>Abrir biblioteca</Text>
               </Pressable>
             )}
@@ -419,28 +510,62 @@ export default function App() {
         <Text style={s.privacy}>Processamento local · llama.cpp</Text>
       </KeyboardAvoidingView>
 
-      <Modal visible={settingsOpen} transparent animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
+      <Modal visible={menuOpen} transparent animationType="slide" onRequestClose={() => setMenuOpen(false)}>
         <View style={s.modalBackdrop}>
-          <Pressable style={s.backdropDismiss} onPress={() => setSettingsOpen(false)} />
+          <Pressable style={s.backdropDismiss} onPress={() => setMenuOpen(false)} />
+          <View style={[s.menuSheet, s.menuChoiceSheet]}>
+            <View style={s.sheetHandle} />
+            <View style={s.sheetHeader}>
+              <View>
+                <Text style={s.sheetTitle}>Menu</Text>
+                <Text style={s.sheetSubtitle}>Quazy AI</Text>
+              </View>
+              <Pressable onPress={() => setMenuOpen(false)} style={s.closeButton}>
+                <Text style={s.closeGlyph}>×</Text>
+              </Pressable>
+            </View>
+            <Pressable style={s.menuOption} onPress={() => { setMenuOpen(false); setModelsOpen(true); }}>
+              <View style={s.menuOptionIcon}><Text style={s.menuOptionGlyph}>▤</Text></View>
+              <View style={s.menuOptionCopy}>
+                <Text style={s.menuOptionTitle}>Modelos</Text>
+                <Text style={s.menuOptionHint}>Importar, carregar ou remover GGUF</Text>
+              </View>
+              <Text style={s.menuOptionArrow}>›</Text>
+            </Pressable>
+            <Pressable style={s.menuOption} onPress={() => { setMenuOpen(false); setSettingsOpen(true); }}>
+              <View style={s.menuOptionIcon}><Text style={s.menuOptionGlyph}>⚙</Text></View>
+              <View style={s.menuOptionCopy}>
+                <Text style={s.menuOptionTitle}>Configurações</Text>
+                <Text style={s.menuOptionHint}>CPU, memória e parâmetros de geração</Text>
+              </View>
+              <Text style={s.menuOptionArrow}>›</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={modelsOpen} transparent animationType="slide" onRequestClose={() => setModelsOpen(false)}>
+        <View style={s.modalBackdrop}>
+          <Pressable style={s.backdropDismiss} onPress={() => setModelsOpen(false)} />
           <View style={s.menuSheet}>
             <View style={s.sheetHandle} />
             <View style={s.sheetHeader}>
               <View>
-                <Text style={s.sheetTitle}>Motor e modelos</Text>
-                <Text style={s.sheetSubtitle}>Biblioteca local e desempenho</Text>
+                <Text style={s.sheetTitle}>Modelos</Text>
+                <Text style={s.sheetSubtitle}>Biblioteca local de GGUF</Text>
               </View>
-              <Pressable onPress={() => setSettingsOpen(false)} style={s.closeButton}>
+              <Pressable onPress={() => setModelsOpen(false)} style={s.closeButton}>
                 <Text style={s.closeGlyph}>×</Text>
               </Pressable>
             </View>
             <ScrollView
               style={s.settingsScroll}
               contentContainerStyle={s.settingsScrollContent}
-              showsVerticalScrollIndicator={true}
-              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="always"
               nestedScrollEnabled
+              overScrollMode="never"
             >
-              <Text style={s.sectionTitle}>BIBLIOTECA DE MODELOS</Text>
+                            <Text style={s.sectionTitle}>BIBLIOTECA DE MODELOS</Text>
               <Pressable onPress={importModel} disabled={busy} style={[s.importButton, busy && s.disabled]}>
                 {busy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={s.importGlyph}>＋</Text>}
                 <Text style={s.importButtonText}>Importar arquivo GGUF</Text>
@@ -462,8 +587,33 @@ export default function App() {
                   </Pressable>
                 </View>
               ))}
-
-              <Text style={s.sectionTitle}>CPU</Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={settingsOpen} transparent animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
+        <View style={s.modalBackdrop}>
+          <Pressable style={s.backdropDismiss} onPress={() => setSettingsOpen(false)} />
+          <View style={s.menuSheet}>
+            <View style={s.sheetHandle} />
+            <View style={s.sheetHeader}>
+              <View>
+                <Text style={s.sheetTitle}>Configurações</Text>
+                <Text style={s.sheetSubtitle}>Desempenho e geração local</Text>
+              </View>
+              <Pressable onPress={() => setSettingsOpen(false)} style={s.closeButton}>
+                <Text style={s.closeGlyph}>×</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              style={s.settingsScroll}
+              contentContainerStyle={s.settingsScrollContent}
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="always"
+              nestedScrollEnabled
+              overScrollMode="never"
+            >
+                            <Text style={s.sectionTitle}>CPU</Text>
               <Text style={s.settingName}>Threads de geração: {settings.threads}</Text>
               <Text style={s.settingHint}>Usadas na geração de um token por vez. O aparelho informou {cpuCores} CPUs disponíveis.</Text>
               <View style={s.chipRow}>
@@ -648,7 +798,15 @@ const s = StyleSheet.create({
   backdropDismiss: {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0},
   menuSheet: {height: '92%', maxHeight: '92%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 24},
   settingsScroll: {flex: 1, minHeight: 0},
-  settingsScrollContent: {paddingBottom: 28},
+  settingsScrollContent: {paddingBottom: 40, flexGrow: 1},
+  menuChoiceSheet: {height: 'auto', maxHeight: '55%'},
+  menuOption: {minHeight: 70, flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F0F1F5'},
+  menuOptionIcon: {width: 42, height: 42, borderRadius: 13, backgroundColor: '#F1F0FF', alignItems: 'center', justifyContent: 'center'},
+  menuOptionGlyph: {fontSize: 19, color: '#635BDB'},
+  menuOptionCopy: {flex: 1, paddingHorizontal: 12},
+  menuOptionTitle: {fontSize: 14, fontWeight: '800', color: '#27293D'},
+  menuOptionHint: {fontSize: 11, color: '#858A9B', marginTop: 4},
+  menuOptionArrow: {fontSize: 25, color: '#A0A4B1'},
   sheetHandle: {alignSelf: 'center', width: 38, height: 4, borderRadius: 4, backgroundColor: '#DFE0E8', marginTop: 10, marginBottom: 17},
   sheetHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18},
   sheetTitle: {fontSize: 20, fontWeight: '800', color: '#202238'},
