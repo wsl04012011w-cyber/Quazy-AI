@@ -433,11 +433,9 @@ Java_com_quazy_ai_NativeBridge_nativeGenerate(
             }
 
             ++generated;
-            // Batch callbacks instead of scheduling one React Native event per token.
-            // Four tokens per chunk keeps the stream responsive without flooding JS.
-            if ((generated % 4) == 0) {
-                emit_delta(env, callback, callback_method, output, emitted_bytes);
-            }
+            // Stream each decoded token immediately. The UTF-8 boundary guard
+            // prevents partial multibyte characters from reaching React Native.
+            emit_delta(env, callback, callback_method, output, emitted_bytes);
             batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
             if (llama_decode(g_context, batch) != 0) {
                 if (output.empty()) output = "ERROR:O backend interrompeu a geração ao processar um token.";

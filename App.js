@@ -283,20 +283,61 @@ export default function App() {
 
   const renderMessage = ({item}) => {
     const user = item.role === 'user';
-    return (
-      <View style={[s.messageRow, user ? s.userRow : s.assistantRow]}>
-        <View style={[s.bubble, user ? s.userBubble : s.assistantBubble, item.error && s.errorBubble]}>
-          {!user && <Text style={s.author}>QUAZY AI</Text>}
-          <Text style={[s.message, user && s.userMessage, item.error && s.errorMessage]}>
-            {item.text || (item.streaming ? '' : ' ')}
-          </Text>
-          {item.streaming && (
-            <View style={s.streamStatus}>
-              {!item.text && <ActivityIndicator size="small" color="#7168D9" />}
-              <Text style={s.streamText}>{item.text ? 'Gerando…' : 'Pensando…'}</Text>
-            </View>
-          )}
+    if (user) {
+      return (
+        <View style={[s.messageRow, s.userRow]}>
+          <View style={[s.bubble, s.userBubble]}>
+            <Text style={[s.message, s.userMessage]}>{item.text}</Text>
+          </View>
         </View>
+      );
+    }
+
+    const raw = item.text || '';
+    const openThink = raw.indexOf('<think>');
+    const closeThink = openThink >= 0 ? raw.indexOf('</think>', openThink + 7) : -1;
+    const hasThinking = openThink >= 0;
+    const thinking = hasThinking
+      ? raw.slice(openThink + 7, closeThink >= 0 ? closeThink : raw.length).trim()
+      : '';
+    const answer = hasThinking
+      ? (closeThink >= 0 ? raw.slice(closeThink + 8) : '')
+      : raw;
+    const showThinking = Boolean(item.thinkingExpanded);
+
+    return (
+      <View style={[s.messageRow, s.assistantRow, s.assistantMessageRow]}>
+        {hasThinking && (
+          <View style={s.thinkingContainer}>
+            <Pressable
+              onPress={() => setMessages(current => current.map(message =>
+                message.id === item.id
+                  ? {...message, thinkingExpanded: !message.thinkingExpanded}
+                  : message,
+              ))}
+              style={s.thinkingToggle}
+            >
+              <Text style={s.thinkingChevron}>{showThinking ? '⌄' : '›'}</Text>
+              <Text style={s.thinkingTitle}>Pensamento</Text>
+              {item.streaming && closeThink < 0 && <ActivityIndicator size="small" color="#8A85C9" />}
+            </Pressable>
+            {showThinking && Boolean(thinking) && (
+              <Text style={s.thinkingText}>{thinking}</Text>
+            )}
+          </View>
+        )}
+        {Boolean(answer) && (
+          <Text style={[s.message, s.assistantMessage, item.error && s.errorMessage]}>
+            {answer.trimStart()}
+          </Text>
+        )}
+        {item.streaming && (
+          <View style={s.streamStatus}>
+            {!raw && <ActivityIndicator size="small" color="#7168D9" />}
+            <Text style={s.streamText}>{raw ? 'Gerando…' : 'Pensando…'}</Text>
+          </View>
+        )}
+        {item.error && !answer && <Text style={s.messageError}>{raw}</Text>}
       </View>
     );
   };
@@ -379,7 +420,8 @@ export default function App() {
       </KeyboardAvoidingView>
 
       <Modal visible={settingsOpen} transparent animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
-        <Pressable style={s.modalBackdrop} onPress={() => setSettingsOpen(false)}>
+        <View style={s.modalBackdrop}>
+          <Pressable style={s.backdropDismiss} onPress={() => setSettingsOpen(false)} />
           <View style={s.menuSheet}>
             <View style={s.sheetHandle} />
             <View style={s.sheetHeader}>
@@ -391,7 +433,13 @@ export default function App() {
                 <Text style={s.closeGlyph}>×</Text>
               </Pressable>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={s.settingsScroll}
+              contentContainerStyle={s.settingsScrollContent}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
               <Text style={s.sectionTitle}>BIBLIOTECA DE MODELOS</Text>
               <Pressable onPress={importModel} disabled={busy} style={[s.importButton, busy && s.disabled]}>
                 {busy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={s.importGlyph}>＋</Text>}
@@ -540,7 +588,7 @@ export default function App() {
               <Text style={s.footerNote}>As opções ficam salvas no aparelho. Threads, contexto, batch e cache são aplicados ao carregar o modelo. Temperatura, top-k, top-p e penalidade são aplicados na próxima mensagem.</Text>
             </ScrollView>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </View>
   );
@@ -571,17 +619,22 @@ const s = StyleSheet.create({
   emptyText: {fontSize: 13, lineHeight: 20, color: '#8B90A1', textAlign: 'center', marginTop: 8},
   emptyButton: {marginTop: 18, backgroundColor: '#635BDB', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 12},
   emptyButtonText: {color: '#FFFFFF', fontSize: 12, fontWeight: '800'},
-  messageRow: {width: '100%', marginVertical: 6},
+  messageRow: {width: '100%', marginVertical: 8},
   userRow: {alignItems: 'flex-end'},
   assistantRow: {alignItems: 'flex-start'},
+  assistantMessageRow: {paddingHorizontal: 4, paddingVertical: 2},
   bubble: {maxWidth: '90%', paddingHorizontal: 14, paddingVertical: 11, borderRadius: 17},
   userBubble: {backgroundColor: '#635BDB', borderBottomRightRadius: 5},
-  assistantBubble: {backgroundColor: '#F4F5F9', borderBottomLeftRadius: 5},
-  errorBubble: {backgroundColor: '#FFF3F1'},
-  author: {fontSize: 9, color: '#999EAE', fontWeight: '900', letterSpacing: 0.6, marginBottom: 5},
-  message: {fontSize: 14, lineHeight: 21, color: '#292B3F'},
+  message: {fontSize: 14, lineHeight: 22, color: '#292B3F'},
+  assistantMessage: {width: '100%', paddingHorizontal: 2, color: '#292B3F'},
   userMessage: {color: '#FFFFFF'},
   errorMessage: {color: '#A43E35'},
+  messageError: {fontSize: 12, lineHeight: 18, color: '#A43E35', marginTop: 5},
+  thinkingContainer: {width: '100%', backgroundColor: '#F7F7FB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 9},
+  thinkingToggle: {flexDirection: 'row', alignItems: 'center', minHeight: 22},
+  thinkingChevron: {fontSize: 17, lineHeight: 19, color: '#827DBA', marginRight: 8, width: 12},
+  thinkingTitle: {fontSize: 12, fontWeight: '700', color: '#77739F', flex: 1},
+  thinkingText: {fontSize: 12, lineHeight: 18, color: '#777B8B', marginTop: 8},
   streamStatus: {flexDirection: 'row', alignItems: 'center', marginTop: 6},
   streamText: {fontSize: 10, color: '#898DA0', marginLeft: 6},
   composer: {marginHorizontal: 14, marginTop: 7, marginBottom: 5, borderWidth: 1, borderColor: '#E8E9F0', borderRadius: 18, padding: 7, flexDirection: 'row', alignItems: 'flex-end'},
@@ -592,7 +645,10 @@ const s = StyleSheet.create({
   pressed: {opacity: 0.82, transform: [{scale: 0.98}]},
   privacy: {textAlign: 'center', fontSize: 10, color: '#A4A8B4', paddingBottom: 8, paddingTop: 2},
   modalBackdrop: {flex: 1, backgroundColor: 'rgba(18, 19, 35, 0.30)', justifyContent: 'flex-end'},
-  menuSheet: {maxHeight: '92%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 24},
+  backdropDismiss: {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0},
+  menuSheet: {height: '92%', maxHeight: '92%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 24},
+  settingsScroll: {flex: 1, minHeight: 0},
+  settingsScrollContent: {paddingBottom: 28},
   sheetHandle: {alignSelf: 'center', width: 38, height: 4, borderRadius: 4, backgroundColor: '#DFE0E8', marginTop: 10, marginBottom: 17},
   sheetHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18},
   sheetTitle: {fontSize: 20, fontWeight: '800', color: '#202238'},
