@@ -825,7 +825,7 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  screen: {flex: 1, backgroundColor: '#FFFFFF', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0},
+  screen: {flex: 1, backgroundColor: '#FFFFFF'},
   header: {height: 66, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F0F1F5'},
   logo: {width: 40, height: 40, borderRadius: 14, backgroundColor: '#635BDB', alignItems: 'center', justifyContent: 'center'},
   logoText: {color: '#FFFFFF', fontSize: 22, fontWeight: '800'},
