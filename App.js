@@ -315,28 +315,30 @@ export default function App() {
     if (busy) return;
     setBusy(true);
     setStatus('Escolha o arquivo GGUF…');
-    let importedName;
     try {
-      importedName = await Native.pickAndImportModel();
+      const importedName = await Native.pickAndImportModel();
       if (importedName === 'CANCELLED') {
         setStatus('Importação cancelada.');
         return;
       }
       await refreshModels();
       setStatus('GGUF copiado para a biblioteca. Iniciando engine…');
-    } catch (error) {
-      const reason = error?.message || 'O Android não conseguiu copiar o arquivo escolhido.';
-      setStatus('Falha ao copiar GGUF: ' + reason);
-      Alert.alert('Falha na cópia do GGUF', reason);
-      return;
-    }
-    try {
       await loadModelDirect(importedName);
       setModelsOpen(false);
     } catch (error) {
-      const reason = error?.message || 'O llama.cpp não conseguiu carregar o modelo.';
-      setStatus('Arquivo copiado, mas a engine não carregou: ' + reason);
-      Alert.alert('GGUF copiado; falha ao carregar', reason);
+      const reason = error?.message || 'O Android não conseguiu importar ou carregar o modelo.';
+      setStatus('Falha ao importar/carregar GGUF: ' + reason);
+      Alert.alert('Falha ao importar/carregar GGUF', reason);
+      try {
+        const stored = await Native.listModels();
+        const loaded = Array.isArray(stored) ? stored.find(model => model.loaded) : null;
+        setModels(Array.isArray(stored) ? stored : []);
+        if (!loaded) {
+          setModelReady(false);
+          setModelName('');
+          loadedConfigRef.current = null;
+        }
+      } catch (_) {}
     } finally {
       setBusy(false);
     }
