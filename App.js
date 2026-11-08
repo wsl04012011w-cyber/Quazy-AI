@@ -1,6 +1,8 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Alert,
   DeviceEventEmitter,
   FlatList,
@@ -160,6 +162,30 @@ export default function App() {
   const loadedConfigRef = useRef(null);
   const pendingStreamRef = useRef('');
   const streamTimerRef = useRef(null);
+  const dotBounce = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!busy) {
+      dotBounce.setValue(0);
+      return undefined;
+    }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(dotBounce, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(dotBounce, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [busy, dotBounce]);
 
   useEffect(() => {
     let mounted = true;
@@ -262,6 +288,24 @@ export default function App() {
       setModelReady(false);
       setStatus(error?.message || 'Falha ao carregar o modelo.');
       Alert.alert('Não foi possível carregar', error?.message || 'Confira o arquivo e as opções de memória.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unloadStoredModel = async name => {
+    if (busy) return;
+    setBusy(true);
+    setStatus('Descarregando modelo…');
+    try {
+      await Native.unloadModel();
+      setModelReady(false);
+      setModelName('');
+      loadedConfigRef.current = null;
+      setStatus('Modelo descarregado. O arquivo continua salvo na biblioteca.');
+      await refreshModels();
+    } catch (error) {
+      Alert.alert('Não foi possível descarregar', error?.message || 'Erro ao liberar o modelo.');
     } finally {
       setBusy(false);
     }
@@ -439,8 +483,15 @@ export default function App() {
         )}
         {Boolean(answer) && (
           <View style={s.assistantTextLine}>
-            {item.streaming && <View style={s.liveDot} />}
             <Text style={[s.message, s.assistantMessage, item.error && s.errorMessage]}>{answer.trimStart()}</Text>
+            {item.streaming && (
+              <Animated.View
+                style={[
+                  s.liveDot,
+                  {transform: [{translateY: dotBounce.interpolate({inputRange: [0, 1], outputRange: [0, -5]})}]},
+                ]}
+              />
+            )}
           </View>
         )}
         {item.streaming && (
@@ -508,7 +559,7 @@ export default function App() {
         }
       />
 
-      <KeyboardAvoidingView style={s.composerDock} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+      <KeyboardAvoidingView style={s.composerDock} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
         <View style={s.composer}>
           <TextInput
             value={prompt}
@@ -531,7 +582,6 @@ export default function App() {
             {busy ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={s.sendGlyph}>↑</Text>}
           </Pressable>
         </View>
-        <Text style={s.privacy}>Processamento local · llama.cpp</Text>
       </KeyboardAvoidingView>
 
       <Modal visible={menuOpen} transparent animationType="slide" onRequestClose={() => setMenuOpen(false)}>
@@ -603,8 +653,14 @@ export default function App() {
                     <Text style={s.modelItemName} numberOfLines={1}>{model.name}</Text>
                     <Text style={s.settingHint}>{formatSize(model.sizeBytes)}{model.loaded ? ' · carregado' : ''}</Text>
                   </View>
-                  <Pressable onPress={() => loadStoredModel(model.name)} disabled={busy} style={[s.modelLoadButton, busy && s.disabled]}>
-                    <Text style={s.modelLoadText}>{model.loaded ? 'Ativo' : 'Carregar'}</Text>
+                  <Pressable
+                    onPress={() => model.loaded ? unloadStoredModel(model.name) : loadStoredModel(model.name)}
+                    disabled={busy}
+                    style={[s.modelLoadButton, model.loaded && s.modelUnloadButton, busy && s.disabled]}
+                  >
+                    <Text style={[s.modelLoadText, model.loaded && s.modelUnloadText]}>
+                      {model.loaded ? 'Descarregar' : 'Carregar'}
+                    </Text>
                   </Pressable>
                   <Pressable onPress={() => deleteStoredModel(model.name)} disabled={busy || model.loaded} style={[s.deleteModelButton, (busy || model.loaded) && s.disabled]}>
                     <Text style={s.deleteModelText}>×</Text>
@@ -815,14 +871,13 @@ const s = StyleSheet.create({
   newChatButton: {width: 34, height: 34, borderRadius: 11, backgroundColor: '#F1F0FF', alignItems: 'center', justifyContent: 'center', marginLeft: 8},
   newChatGlyph: {fontSize: 22, color: '#635BDB', lineHeight: 26},
   assistantTextLine: {width: '100%', flexDirection: 'row', alignItems: 'flex-start'},
-  liveDot: {width: 7, height: 7, borderRadius: 4, backgroundColor: '#20C879', marginTop: 8, marginRight: 8},
+  liveDot: {width: 7, height: 7, borderRadius: 4, backgroundColor: '#20C879', marginLeft: 7, marginBottom: 4},
   composer: {marginHorizontal: 14, marginTop: 7, marginBottom: 5, borderWidth: 1, borderColor: '#E8E9F0', borderRadius: 18, padding: 7, flexDirection: 'row', alignItems: 'flex-end'},
   input: {flex: 1, maxHeight: 116, minHeight: 42, paddingHorizontal: 10, paddingTop: 11, paddingBottom: 9, color: '#25273A', fontSize: 14},
   send: {height: 42, width: 44, borderRadius: 13, backgroundColor: '#635BDB', alignItems: 'center', justifyContent: 'center'},
   sendDisabled: {backgroundColor: '#C5C4D9'},
   sendGlyph: {color: '#FFFFFF', fontSize: 25, lineHeight: 29, fontWeight: '500'},
   pressed: {opacity: 0.82, transform: [{scale: 0.98}]},
-  privacy: {textAlign: 'center', fontSize: 10, color: '#A4A8B4', paddingBottom: 8, paddingTop: 2},
   modalBackdrop: {flex: 1, backgroundColor: 'rgba(18, 19, 35, 0.30)', justifyContent: 'flex-end'},
   backdropDismiss: {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0},
   menuSheet: {height: '92%', maxHeight: '92%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 24},
@@ -854,6 +909,8 @@ const s = StyleSheet.create({
   modelItemName: {fontSize: 12, fontWeight: '700', color: '#27293D'},
   modelLoadButton: {backgroundColor: '#EFEEFF', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8},
   modelLoadText: {fontSize: 10, color: '#5D55CA', fontWeight: '800'},
+  modelUnloadButton: {backgroundColor: '#F1F0FF'},
+  modelUnloadText: {color: '#7168D9'},
   deleteModelButton: {width: 30, height: 30, borderRadius: 9, backgroundColor: '#F7F7FA', marginLeft: 7, alignItems: 'center', justifyContent: 'center'},
   deleteModelText: {fontSize: 20, color: '#8C91A1', lineHeight: 22},
   chipRow: {flexDirection: 'row', flexWrap: 'wrap', marginTop: 9, marginBottom: 4},
