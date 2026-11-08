@@ -196,19 +196,22 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
         val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         // Migrate existing installs away from the previous 6/8-thread default.
         // The Termux comparison used four generation threads, so start from 4/4.
-        if (prefs.getInt("engineSettingsVersion", 0) < 2) {
+        if (prefs.getInt("engineSettingsVersion", 0) < 3) {
             prefs.edit()
                 .putInt("threads", minOf(4, cores))
                 .putInt("threadsBatch", minOf(4, cores))
-                .putInt("engineSettingsVersion", 2)
+                .putInt("contextSize", 2048)
+                .putInt("batchSize", 512)
+                .putInt("ubatchSize", 128)
+                .putInt("engineSettingsVersion", 3)
                 .apply()
         }
         val defaults = Arguments.createMap().apply {
             putInt("threads", minOf(4, cores))
             putInt("threadsBatch", minOf(4, cores))
-            putInt("contextSize", 4096)
-            putInt("batchSize", 1024)
-            putInt("ubatchSize", 256)
+            putInt("contextSize", 2048)
+            putInt("batchSize", 512)
+            putInt("ubatchSize", 128)
             putInt("gpuLayers", 0)
             putBoolean("useMmap", true)
             putString("cacheType", "f16")
@@ -264,8 +267,8 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
                 (context.getSystemService(Activity.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
                 val threads = intOption(options, "threads", minOf(4, Runtime.getRuntime().availableProcessors())).coerceIn(1, 32)
                 val threadsBatch = intOption(options, "threadsBatch", Runtime.getRuntime().availableProcessors()).coerceIn(1, 32)
-                val contextSize = intOption(options, "contextSize", 4096).coerceIn(512, 32768)
-                val batchSize = intOption(options, "batchSize", 1024).coerceIn(32, 4096)
+                val contextSize = intOption(options, "contextSize", 2048).coerceIn(512, 32768)
+                val batchSize = intOption(options, "batchSize", 512).coerceIn(32, 4096)
                 val ubatchSize = intOption(options, "ubatchSize", 128).coerceIn(16, batchSize)
                 val gpuLayers = intOption(options, "gpuLayers", 0).coerceIn(0, 128)
                 val useMmap = boolOption(options, "useMmap", true)

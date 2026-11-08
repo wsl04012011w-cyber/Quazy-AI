@@ -27,9 +27,9 @@ const ENGINE_KEYS = [
 const DEFAULT_SETTINGS = {
   threads: 4,
   threadsBatch: 8,
-  contextSize: 4096,
-  batchSize: 1024,
-  ubatchSize: 256,
+  contextSize: 2048,
+  batchSize: 512,
+  ubatchSize: 128,
   gpuLayers: 0,
   useMmap: true,
   cacheType: 'f16',
