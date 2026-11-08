@@ -461,14 +461,22 @@ export default function App() {
               </View>
 
               <Text style={s.sectionTitle}>GPU</Text>
-              <View style={s.gpuCard}>
-                <Text style={s.settingName}>Camadas GPU: 0</Text>
-                <Text style={s.settingHint}>
-                  {gpuAvailable
-                    ? 'Backend de GPU detectado. As camadas GPU serão habilitadas em uma configuração compatível.'
-                    : 'Este APK ainda é CPU-only. O controle fica em 0 porque OpenCL/Vulkan não foram incluídos/validados neste build.'}
-                </Text>
-              </View>
+              {gpuAvailable ? (
+                <>
+                  <Text style={s.settingName}>Camadas GPU: {settings.gpuLayers}</Text>
+                  <Text style={s.settingHint}>Número de camadas do modelo transferidas para o backend de GPU.</Text>
+                  <View style={s.chipRow}>
+                    {[0, 4, 8, 16, 32, 64, 128].map(value => (
+                      <Chip key={value} label={value === 0 ? 'CPU' : String(value)} selected={settings.gpuLayers === value} onPress={() => updateSetting('gpuLayers', value)} />
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <View style={s.gpuCard}>
+                  <Text style={s.settingName}>Camadas GPU: 0 · CPU-only</Text>
+                  <Text style={s.settingHint}>Este APK não inclui um backend GPU validado. OpenCL/Vulkan permanecem desligados; o offload não pode ser ativado neste build.</Text>
+                </View>
+              )}
 
               <Text style={s.sectionTitle}>GERAÇÃO</Text>
               <Text style={s.settingName}>Máximo de tokens: {settings.maxTokens}</Text>

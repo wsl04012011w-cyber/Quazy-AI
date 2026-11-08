@@ -82,7 +82,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
         }
 
         val directory = modelsDirectory()
-        val base = sanitized.removeSuffix(".gguf").removeSuffix(".GGUF")
+        val base = sanitized.substring(0, sanitized.lastIndexOf('.'))
         var destination = File(directory, "$base.gguf")
         var suffix = 2
         while (destination.exists()) {
