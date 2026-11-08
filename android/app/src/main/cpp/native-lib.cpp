@@ -318,14 +318,15 @@ Java_com_quazy_ai_NativeBridge_nativeGenerate(
         sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
         if (sampler == nullptr) return to_jstring(env, "ERROR:Não foi possível inicializar o sampler.");
 
-        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
-            llama_vocab_n_tokens(vocab), 64, 1.08f, 0.0f, 0.0f
-        ));
         if (temperature <= 0.06f) {
             llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
         } else {
             llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40));
             llama_sampler_chain_add(sampler, llama_sampler_init_top_p(top_p, 1));
+            // Apply repeat penalty only after filtering candidates, as recommended by llama.cpp.
+            llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
+                llama_vocab_n_tokens(vocab), 64, 1.08f, 0.0f, 0.0f
+            ));
             llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
             llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
         }
