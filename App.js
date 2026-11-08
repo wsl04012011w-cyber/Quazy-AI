@@ -41,7 +41,7 @@ const DEFAULT_SETTINGS = {
   repeatPenalty: 1.05,
 };
 
-const THOUGHT_TAG_PATTERN = /(?:think|analys|reason|thought|scratch|reflect|deliberat|internal|cognit|rationale|chain.?of.?thought|justify|brainstorm|planning|plan|work)/i;
+const THOUGHT_TAG_PATTERN = /(?:think|analys|reason|thought|scratch|reflect|deliberat|internal|cognit|rationale|chain.?of.?thought|justify|brainstorm|planning|plan|work|cot|trace|monologue|working)/i;
 const FINAL_TAG_PATTERN = /^(?:final|answer|response|output)$/i;
 
 function parseAssistantOutput(rawText) {
@@ -60,7 +60,7 @@ function parseAssistantOutput(rawText) {
 
   // Supports XML-like tags (<think>, <Thinking>, <analysis>, <reasoning>...),
   // common reasoning tokens and Harmony-style channel markers.
-  const markerPattern = /<\\|(?:begin_of_thought|start_of_thought|startofthought)\\|>|<\\|(?:end_of_thought|endofthought|end_thought)\\|>|<\\|channel\\|>\\s*(analysis|final|commentary|justify|confidence|summary)\\b|<\\|(analysis|final|commentary)\\|>|<\\/?([a-z][a-z0-9_-]*)\\s*>/gi;
+  const markerPattern = /<\|(?:begin_of_thought|start_of_thought|startofthought)\|>|<\|(?:end_of_thought|endofthought|end_thought)\|>|<\|channel\|>\\s*(analysis|final|commentary|justify|confidence|summary)\\b|<\|(analysis|final|commentary)\|>|<\/?([a-z][a-z0-9_-]*)\\s*>/gi;
 
   let match;
   while ((match = markerPattern.exec(raw)) !== null) {
@@ -68,13 +68,13 @@ function parseAssistantOutput(rawText) {
     cursor = markerPattern.lastIndex;
     const marker = match[0].toLowerCase();
 
-    if (/^<\\|(?:begin_of_thought|start_of_thought|startofthought)\\|>$/.test(marker)) {
+    if (/^<\|(?:begin_of_thought|start_of_thought|startofthought)\|>$/.test(marker)) {
       mode = 'thinking';
       hasThinking = true;
       thinkingOpen = true;
       continue;
     }
-    if (/^<\\|(?:end_of_thought|endofthought|end_thought)\\|>$/.test(marker)) {
+    if (/^<\|(?:end_of_thought|endofthought|end_thought)\|>$/.test(marker)) {
       mode = 'answer';
       thinkingOpen = false;
       continue;
@@ -120,7 +120,7 @@ function parseAssistantOutput(rawText) {
   // A tag can arrive split across tokens. Hold an unfinished marker until the
   // next streaming chunk so fragments such as "<thi" never flash in the chat.
   const partialMarker = tail.lastIndexOf('<');
-  if (partialMarker >= 0 && /^<\\/?[a-z0-9_:-]*$/i.test(tail.slice(partialMarker))) {
+  if (partialMarker >= 0 && /^<\/?[a-z0-9_:-]*$/i.test(tail.slice(partialMarker))) {
     tail = tail.slice(0, partialMarker);
   }
   append(tail);
