@@ -238,9 +238,6 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
         }
         QLOGE("llama.cpp %s | registered backends: %s", llama_version(), backend_names.c_str());
 
-        const uint32_t model_context_limit = llama_model_n_ctx_train(g_model);
-        const int32_t safe_model_context = static_cast<int32_t>(std::min<uint32_t>(model_context_limit > 0 ? model_context_limit : 8192U, 32768U));
-        const int32_t ctx_size = std::clamp<int32_t>(requested_context_size, 512, std::max(512, safe_model_context));
         const int32_t threads = std::clamp<int32_t>(requested_threads, 1, 32);
         const int32_t threads_batch = std::clamp<int32_t>(requested_threads_batch, 1, 32);
         const int32_t batch_size = std::clamp<int32_t>(requested_batch_size, 32, 4096);
@@ -265,6 +262,15 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
             release_model_locked();
             return to_jstring(env, load_error("O llama.cpp não conseguiu abrir este GGUF. Confira se o arquivo está completo e compatível."));
         }
+
+        // Only query model metadata after llama_model_load_from_file succeeds.
+        const uint32_t model_context_limit = llama_model_n_ctx_train(g_model);
+        const int32_t safe_model_context = static_cast<int32_t>(
+            std::min<uint32_t>(model_context_limit > 0 ? model_context_limit : 8192U, 32768U)
+        );
+        const int32_t ctx_size = std::clamp<int32_t>(
+            requested_context_size, 512, std::max(512, safe_model_context)
+        );
 
         llama_context_params context_params = llama_context_default_params();
         context_params.n_ctx = static_cast<uint32_t>(ctx_size);
