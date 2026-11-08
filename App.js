@@ -78,10 +78,14 @@ export default function App() {
         const cores = Math.max(1, Number(device?.cpuCores) || 8);
         setCpuCores(cores);
         setGpuAvailable(Boolean(device?.gpuBackendAvailable));
+        const savedThreads = Number(saved?.threads) || 4;
+        // Earlier builds defaulted to 6 generation threads; migrate that default
+        // to 4, which better matches the Termux benchmark on this device.
+        const preferredThreads = savedThreads === 6 ? 4 : savedThreads;
         const merged = {
           ...DEFAULT_SETTINGS,
           ...saved,
-          threads: Math.min(Number(saved?.threads) || Math.min(6, cores), cores),
+          threads: Math.min(preferredThreads, cores),
           threadsBatch: Math.min(Number(saved?.threadsBatch) || cores, cores),
           gpuLayers: device?.gpuBackendAvailable ? Number(saved?.gpuLayers) || 0 : 0,
         };

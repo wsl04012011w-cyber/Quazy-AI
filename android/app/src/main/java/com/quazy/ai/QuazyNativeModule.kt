@@ -193,7 +193,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
         val prefs = context.getSharedPreferences(PREFS, 0)
         val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         val defaults = Arguments.createMap().apply {
-            putInt("threads", minOf(6, cores))
+            putInt("threads", minOf(4, cores))
             putInt("threadsBatch", cores)
             putInt("contextSize", 2048)
             putInt("batchSize", 512)
@@ -251,7 +251,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
                 val file = resolveModel(name)
                 val memory = ActivityManager.MemoryInfo()
                 (context.getSystemService(Activity.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
-                val threads = intOption(options, "threads", minOf(6, Runtime.getRuntime().availableProcessors())).coerceIn(1, 32)
+                val threads = intOption(options, "threads", minOf(4, Runtime.getRuntime().availableProcessors())).coerceIn(1, 32)
                 val threadsBatch = intOption(options, "threadsBatch", Runtime.getRuntime().availableProcessors()).coerceIn(1, 32)
                 val contextSize = intOption(options, "contextSize", 2048).coerceIn(512, 8192)
                 val batchSize = intOption(options, "batchSize", 512).coerceIn(32, 2048)

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <chrono>
 #include <iomanip>
 #include <mutex>
 #include <new>
@@ -387,9 +388,11 @@ Java_com_quazy_ai_NativeBridge_nativeGenerate(
         std::vector<char> piece(256);
         size_t emitted_bytes = 0;
         int32_t generated = 0;
+        const auto generation_started = std::chrono::steady_clock::now();
 
         for (int32_t i = 0; i < max_tokens; ++i) {
             const llama_token token = llama_sampler_sample(sampler, g_context, -1);
+            llama_sampler_accept(sampler, token);
             if (llama_vocab_is_eog(vocab, token)) break;
 
             int32_t piece_size = llama_token_to_piece(
@@ -403,10 +406,14 @@ Java_com_quazy_ai_NativeBridge_nativeGenerate(
             }
             if (piece_size > 0) {
                 output.append(piece.data(), static_cast<size_t>(piece_size));
-                emit_delta(env, callback, callback_method, output, emitted_bytes);
             }
 
             ++generated;
+            // Batch callbacks instead of scheduling one React Native event per token.
+            // Four tokens per chunk keeps the stream responsive without flooding JS.
+            if ((generated % 4) == 0) {
+                emit_delta(env, callback, callback_method, output, emitted_bytes);
+            }
             batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
             if (llama_decode(g_context, batch) != 0) {
                 if (output.empty()) output = "ERROR:O backend interrompeu a geração ao processar um token.";
@@ -419,11 +426,15 @@ Java_com_quazy_ai_NativeBridge_nativeGenerate(
         sampler = nullptr;
         emit_delta(env, callback, callback_method, output, emitted_bytes);
 
+        const auto generation_finished = std::chrono::steady_clock::now();
+        const double generation_seconds =
+            std::chrono::duration<double>(generation_finished - generation_started).count();
         const llama_perf_context_data perf = llama_perf_context(g_context);
         g_prompt_tokens = perf.n_p_eval;
         g_generated_tokens = generated;
-        g_tokens_per_second = perf.t_eval_ms > 0.0
-            ? static_cast<double>(generated) * 1000.0 / perf.t_eval_ms
+        // Measure sampling + token decode directly instead of relying on perf counters.
+        g_tokens_per_second = generation_seconds > 0.0
+            ? static_cast<double>(generated) / generation_seconds
             : 0.0;
 
         if (output.empty()) output = "ERROR:O modelo encerrou a geração sem produzir texto.";
