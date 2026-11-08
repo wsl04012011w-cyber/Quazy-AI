@@ -499,7 +499,7 @@ export default function App() {
               <Animated.Text
                 style={[
                   s.liveDot,
-                  {fontSize: dotBounce.interpolate({inputRange: [0, 1], outputRange: [7, 11]})},
+                  {fontSize: dotBounce.interpolate({inputRange: [0, 1], outputRange: [8, 14]}), lineHeight: dotBounce.interpolate({inputRange: [0, 1], outputRange: [12, 19]}), opacity: dotBounce.interpolate({inputRange: [0, 0.5, 1], outputRange: [0.65, 1, 0.65]})},
                 ]}
               >●</Animated.Text>
             ) : null}
@@ -520,7 +520,7 @@ export default function App() {
   const ubatchOptions = [32, 64, 128, 256].filter(value => value <= settings.batchSize);
 
   return (
-    <View style={s.screen}>
+    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={s.header}>
         <View style={s.logo}><Text style={s.logoText}>Q</Text></View>
@@ -570,7 +570,7 @@ export default function App() {
         }
       />
 
-      <KeyboardAvoidingView style={s.composerDock} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+      <View style={s.composerDock}>
         <View style={s.composer}>
           <TextInput
             value={prompt}
@@ -593,7 +593,7 @@ export default function App() {
             {busy ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={s.sendGlyph}>↑</Text>}
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       <Modal visible={menuOpen} transparent animationType="slide" onRequestClose={() => setMenuOpen(false)}>
         <View style={s.modalBackdrop}>
@@ -831,7 +831,7 @@ export default function App() {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
