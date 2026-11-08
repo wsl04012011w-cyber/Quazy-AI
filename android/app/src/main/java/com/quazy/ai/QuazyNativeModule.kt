@@ -192,9 +192,18 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
     fun getEngineSettings(promise: Promise) {
         val prefs = context.getSharedPreferences(PREFS, 0)
         val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        // Migrate existing installs away from the previous 6/8-thread default.
+        // The Termux comparison used four generation threads, so start from 4/4.
+        if (prefs.getInt("engineSettingsVersion", 0) < 2) {
+            prefs.edit()
+                .putInt("threads", minOf(4, cores))
+                .putInt("threadsBatch", minOf(4, cores))
+                .putInt("engineSettingsVersion", 2)
+                .apply()
+        }
         val defaults = Arguments.createMap().apply {
             putInt("threads", minOf(4, cores))
-            putInt("threadsBatch", cores)
+            putInt("threadsBatch", minOf(4, cores))
             putInt("contextSize", 2048)
             putInt("batchSize", 512)
             putInt("ubatchSize", 128)

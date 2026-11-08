@@ -2,22 +2,40 @@
 
 Aplicativo Android de inferência local com interface React Native e motor [llama.cpp](https://github.com/ggml-org/llama.cpp) em C++/JNI.
 
-## Estado atual
+## Engine
 
-- Interface React Native com tema claro, conversa, seletor GGUF e campo de mensagem.
-- Motor llama.cpp continua nativo em C++ via JNI; React Native controla apenas a interface.
-- Contadores de tokens obtidos de \`llama_perf_context()\`.
-- Build \`arm64-v8a\` para Android 9 ou superior.
-- Projeto Android organizado em \`android/\`, com o código JavaScript/React Native na raiz.
-- Diagnóstico exportado automaticamente para \`Downloads/QuazyAI\` ao iniciar.
-- Build CPU-only nesta revisão: OpenCL foi desativado porque os logs do aparelho mostraram que \`libOpenCL.so\` não está disponível para o app.
+- React Native 0.81.5; inferência inteiramente nativa em C++/JNI.
+- llama.cpp fixado em `v0.9.0`.
+- Android ARM64: `GGML_CPU_KLEIDIAI=ON`, `GGML_CPU_REPACK=ON`, `GGML_BACKEND_DL=ON` e `GGML_CPU_ALL_VARIANTS=ON`.
+- Variantes CPU dinâmicas: o llama.cpp escolhe em runtime uma variante compatível com os recursos ARM expostos pelo dispositivo.
+- Build NDK em `Release`, com OpenMP e bibliotecas backend incluídos no APK.
+- OpenCL e Vulkan permanecem desativados até que seus drivers sejam validados no Android do aparelho.
 
-## Build
+## Build e assinatura
 
-O GitHub Actions gera um APK de teste em cada push para \`main\`. Consulte a aba **Actions** e baixe o artefato \`Quazy-AI-debug-apk\`.
+GitHub Actions executa `:app:assembleRelease` e valida a assinatura com `apksigner`. O APK normal usa o ID `com.quazy.ai`, sem o sufixo `.debug`.
 
-O build fixa o llama.cpp em \`b12189\`. Dependências React Native estão descritas em \`package.json\`.
+Para assinar com uma chave persistente (recomendado para instalar atualizações sem desinstalar o app), configure estes quatro **Repository secrets** em **Settings → Secrets and variables → Actions**:
 
-## Aceleração
+- `ANDROID_KEYSTORE_BASE64`: keystore JKS codificado em Base64.
+- `ANDROID_KEYSTORE_PASSWORD`: senha do keystore.
+- `ANDROID_KEY_ALIAS`: alias da chave.
+- `ANDROID_KEY_PASSWORD`: senha da chave.
 
-Esta versão prioriza estabilidade e carregamento de modelos com CPU. A aceleração por GPU não é anunciada como ativa. O backend OpenCL anterior falhava no aparelho por dependência ausente do driver; um backend de GPU deverá ser reintroduzido apenas depois de validar a disponibilidade e a compatibilidade no dispositivo físico.
+Gere uma chave de assinatura privada em um computador confiável com `keytool` e codifique o arquivo JKS em Base64. Nunca versione o keystore nem coloque as senhas no código. Enquanto esses secrets não existirem, o workflow ainda produz um APK Release assinado com a chave debug temporária do runner; esse artefato serve para teste, mas a assinatura muda a cada execução e não permite atualizar a instalação anterior sem desinstalar.
+
+Artefatos:
+- `Quazy-AI-release-signed`: Release assinado com a chave persistente.
+- `Quazy-AI-release-test-signed`: Release assinado com a chave debug temporária do runner.
+
+## Modelos
+
+Os GGUF importados são guardados em `files/models` no armazenamento privado do app e permanecem entre aberturas. A pasta é apagada pelo Android ao desinstalar a aplicação.
+
+## Compatibilidade
+
+- ABI: `arm64-v8a`.
+- Android mínimo: API 28.
+- Compile/target SDK: 36.
+- NDK: 27.2.12479018.
+- CMake: 3.31.6.

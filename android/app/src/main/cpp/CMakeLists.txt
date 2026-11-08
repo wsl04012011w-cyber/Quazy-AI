@@ -1,42 +1,48 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(quazy_native LANGUAGES C CXX)
 
-# The APK is debuggable for installation/testing, but llama.cpp must still be
-# compiled with optimized native code. The previous Debug CMake flags left the
-# inference engine without optimization, which can severely reduce tokens/s.
-if(ANDROID)
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O3 -DNDEBUG" CACHE STRING "" FORCE)
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O3 -DNDEBUG" CACHE STRING "" FORCE)
-endif()
+# Gradle's assembleRelease selects the Release native configuration. Keep the
+# CMake fallback explicit for CI/local builds so llama.cpp and every ggml
+# backend are compiled with Release optimization, not just this JNI wrapper.
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Native build type" FORCE)
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
 
 include(FetchContent)
+
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_APP OFF CACHE BOOL "" FORCE)
-set(LLAMA_BUILD_UI OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
 set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
 set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
 
-# Android arm64 CPU configuration recommended by upstream llama.cpp:
-# portable NDK build, KleidiAI kernels, no OpenMP or llamafile runtime.
+# Upstream's Android CPU strategy: dynamic backend libraries with all
+# compatible ARM variants. llama.cpp selects the best variant supported by
+# the device at runtime, avoiding a single generic armv8-a CPU binary and
+# avoiding unsafe hard-coded -march flags on heterogeneous big.LITTLE CPUs.
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL ON CACHE BOOL "" FORCE)
+set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
-set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
-set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+set(GGML_CPU_ARM_ARCH "" CACHE STRING "" FORCE)
+
+# ARM CPU acceleration.
 set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
 set(GGML_CPU_REPACK ON CACHE BOOL "" FORCE)
+set(GGML_OPENMP ON CACHE BOOL "" FORCE)
+set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 
-# CPU-only remains deliberate for this APK. The phone's OpenCL loader was not
-# available from the app linker namespace; Vulkan has not been validated yet.
+# Keep GPU APIs disabled until their driver libraries are verified on-device.
 set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
 set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
-set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     llama_cpp
     GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
-    GIT_TAG b12189
+    GIT_TAG v0.9.0
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(llama_cpp)

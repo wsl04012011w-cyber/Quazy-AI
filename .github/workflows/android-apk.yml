@@ -1,55 +1,120 @@
-name: Android APK
+name: Android Release APK
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  build-apk:
-    name: Build arm64-v8a APK (React Native + llama.cpp CPU)
+  build-release:
+    name: Build optimized arm64-v8a Release APK
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.19.4"
+
       - name: Install React Native dependencies
         run: npm install --no-audit --no-fund
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+
       - name: Install Android SDK components
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.31.6"
           sudo apt-get update
           sudo apt-get install -y ninja-build
+
       - name: Install Gradle
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           curl -fsSL https://services.gradle.org/distributions/gradle-8.14.3-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /opt
           echo "/opt/gradle-8.14.3/bin" >> "$GITHUB_PATH"
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace --max-workers=2 -p android :app:assembleDebug
-      - name: Upload APK
+
+      - name: Prepare release signing
+        id: signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]; then
+            KEYSTORE_PATH="$RUNNER_TEMP/quazy-release.jks"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+            test -s "$KEYSTORE_PATH"
+            echo "QUAZY_RELEASE_STORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+            echo "mode=persistent-signed" >> "$GITHUB_OUTPUT"
+            echo "Using persistent release signing key from GitHub Actions secrets."
+          else
+            echo "mode=temporary-debug-signed" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release APK will use the runner's temporary debug signing key. Configure the four ANDROID_KEYSTORE_* secrets for a stable updateable release identity."
+          fi
+
+      - name: Build optimized Release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          gradle --no-daemon --stacktrace --max-workers=2 -p android \
+            :app:assembleRelease -PquazyVersionCode="$GITHUB_RUN_NUMBER"
+
+      - name: Verify Release APK, signature and CPU backend libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          echo "---- packaged ARM64 llama.cpp backend libraries ----"
+          unzip -Z1 "$APK" | grep -E '^lib/arm64-v8a/lib(ggml|llama|quazy)' | sort
+          unzip -Z1 "$APK" | grep -E '^lib/arm64-v8a/libggml-cpu.*\.so$' >/dev/null
+          sha256sum "$APK" | tee android/app/build/outputs/apk/release/app-release.apk.sha256
+
+      - name: Upload persistent-key Release APK
+        if: steps.signing.outputs.mode == 'persistent-signed'
         uses: actions/upload-artifact@v4
         with:
-          name: Quazy-AI-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: Quazy-AI-release-signed
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test-signed Release APK
+        if: steps.signing.outputs.mode == 'temporary-debug-signed'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quazy-AI-release-test-signed
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/app-release.apk.sha256
           if-no-files-found: error
           retention-days: 14
