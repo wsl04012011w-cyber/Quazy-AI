@@ -182,7 +182,7 @@ Java_com_quazy_ai_NativeBridge_nativeGpuBackendAvailable(JNIEnv *, jobject) {
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_quazy_ai_NativeBridge_nativeLoadModel(
         JNIEnv * env, jobject,
-        jstring path_value, jint requested_gpu_layers,
+        jstring path_value, jstring backend_dir_value, jint requested_gpu_layers,
         jint requested_context_size, jint requested_threads,
         jint requested_threads_batch, jint requested_batch_size,
         jint requested_ubatch_size, jboolean use_mmap,
@@ -213,6 +213,30 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
             llama_backend_init();
             g_backend_initialized = true;
         }
+
+        // Dynamic CPU backends are packaged in Android's nativeLibraryDir.
+        // The default llama.cpp search path based on /proc/self/exe does not
+        // reliably point there for an Android app_process runtime.
+        const std::string backend_dir = from_jstring(env, backend_dir_value);
+        if (!backend_dir.empty()) {
+            ggml_backend_load_all_from_path(backend_dir.c_str());
+        }
+
+        const ggml_backend_reg_t cpu_backend = ggml_backend_reg_by_name("CPU");
+        if (cpu_backend == nullptr) {
+            QLOGE("No CPU backend registered. nativeLibraryDir=%s", backend_dir.c_str());
+            release_model_locked();
+            return to_jstring(env, load_error(
+                "O backend CPU do llama.cpp não foi carregado. Verifique se as bibliotecas libggml-cpu-*.so estão empacotadas no APK."
+            ));
+        }
+
+        std::string backend_names;
+        for (size_t i = 0; i < ggml_backend_reg_count(); ++i) {
+            if (!backend_names.empty()) backend_names += ", ";
+            backend_names += ggml_backend_reg_name(ggml_backend_reg_get(i));
+        }
+        QLOGE("llama.cpp %s | registered backends: %s", llama_version(), backend_names.c_str());
 
         const int32_t ctx_size = std::clamp<int32_t>(requested_context_size, 512, 8192);
         const int32_t threads = std::clamp<int32_t>(requested_threads, 1, 32);

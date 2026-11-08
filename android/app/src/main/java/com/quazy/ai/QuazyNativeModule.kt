@@ -276,6 +276,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
 
                 val result = nativeBridge().nativeLoadModel(
                     file.absolutePath,
+                    context.applicationInfo.nativeLibraryDir,
                     gpuLayers,
                     contextSize,
                     threads,

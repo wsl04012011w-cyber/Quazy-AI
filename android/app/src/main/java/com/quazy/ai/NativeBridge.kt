@@ -7,6 +7,7 @@ interface NativeTokenCallback {
 class NativeBridge {
     external fun nativeLoadModel(
         path: String,
+        backendDirectory: String,
         requestedGpuLayers: Int,
         contextSize: Int,
         threads: Int,
