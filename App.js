@@ -285,8 +285,13 @@ export default function App() {
       await loadModelDirect(name);
       setModelsOpen(false);
     } catch (error) {
+      // Native load replaces the previous engine before attempting the new one.
+      // If it fails, clear every JS-side marker for the old model as well.
       setModelReady(false);
+      setModelName('');
+      loadedConfigRef.current = null;
       setStatus(error?.message || 'Falha ao carregar o modelo.');
+      await refreshModels().catch(() => {});
       Alert.alert('Não foi possível carregar', error?.message || 'Confira o arquivo e as opções de memória.');
     } finally {
       setBusy(false);
@@ -305,7 +310,9 @@ export default function App() {
       setStatus('Modelo descarregado. O arquivo continua salvo na biblioteca.');
       await refreshModels();
     } catch (error) {
+      setStatus(error?.message || 'Erro ao liberar o modelo.');
       Alert.alert('Não foi possível descarregar', error?.message || 'Erro ao liberar o modelo.');
+      await refreshModels().catch(() => {});
     } finally {
       setBusy(false);
     }
