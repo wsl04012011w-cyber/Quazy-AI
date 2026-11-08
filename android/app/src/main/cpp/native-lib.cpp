@@ -255,8 +255,8 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
         model_params.load_mode = use_mmap == JNI_TRUE ? LLAMA_LOAD_MODE_MMAP : LLAMA_LOAD_MODE_NONE;
         model_params.lazy_mode = use_mmap == JNI_TRUE ? LLAMA_LAZY_MODE_AUTO : LLAMA_LAZY_MODE_OFF;
 
-        QLOGE("Loading GGUF: ctx=%d threads=%d batch_threads=%d gpu_layers=%d mmap=%d",
-              ctx_size, threads, threads_batch, gpu_layers, use_mmap == JNI_TRUE ? 1 : 0);
+        QLOGE("Loading GGUF: requested_ctx=%d threads=%d batch_threads=%d gpu_layers=%d mmap=%d",
+              requested_context_size, threads, threads_batch, gpu_layers, use_mmap == JNI_TRUE ? 1 : 0);
         g_model = llama_model_load_from_file(path.c_str(), model_params);
         if (g_model == nullptr) {
             release_model_locked();
@@ -271,6 +271,8 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
         const int32_t ctx_size = std::clamp<int32_t>(
             requested_context_size, 512, std::max(512, safe_model_context)
         );
+        QLOGE("Creating llama context: ctx=%d batch=%d ubatch=%d",
+              ctx_size, batch_size, ubatch_size);
 
         llama_context_params context_params = llama_context_default_params();
         context_params.n_ctx = static_cast<uint32_t>(ctx_size);
