@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   DeviceEventEmitter,
   FlatList,
   KeyboardAvoidingView,
@@ -11,73 +12,196 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
 const Native = NativeModules.QuazyNative;
+const ENGINE_KEYS = [
+  'threads', 'threadsBatch', 'contextSize', 'batchSize', 'ubatchSize',
+  'gpuLayers', 'useMmap', 'cacheType', 'flashAttention',
+];
+
+const DEFAULT_SETTINGS = {
+  threads: 4,
+  threadsBatch: 8,
+  contextSize: 2048,
+  batchSize: 512,
+  ubatchSize: 128,
+  gpuLayers: 0,
+  useMmap: true,
+  cacheType: 'f16',
+  flashAttention: 'auto',
+  maxTokens: 128,
+  topK: 40,
+  temperature: 0.7,
+  topP: 0.9,
+  repeatPenalty: 1.05,
+};
+
+function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 'Tamanho desconhecido';
+  if (bytes >= 1024 ** 3) return (bytes / (1024 ** 3)).toFixed(2) + ' GB';
+  return (bytes / (1024 ** 2)).toFixed(0) + ' MB';
+}
 
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [prompt, setPrompt] = useState('');
-  const [status, setStatus] = useState('Carregue um modelo GGUF para começar.');
+  const [status, setStatus] = useState('Importe um modelo GGUF para começar.');
   const [modelReady, setModelReady] = useState(false);
+  const [modelName, setModelName] = useState('');
   const [busy, setBusy] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [maxTokens, setMaxTokens] = useState(128);
-  const [temperature, setTemperature] = useState(0.7);
-  const [topP, setTopP] = useState(0.9);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [settingsReady, setSettingsReady] = useState(false);
+  const [models, setModels] = useState([]);
+  const [cpuCores, setCpuCores] = useState(8);
+  const [gpuAvailable, setGpuAvailable] = useState(false);
   const [tokenStats, setTokenStats] = useState('');
   const listRef = useRef(null);
   const activeRequest = useRef(null);
+  const loadedConfigRef = useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [device, saved, storedModels] = await Promise.all([
+          Native.getDeviceInfo(),
+          Native.getEngineSettings(),
+          Native.listModels(),
+        ]);
+        if (!mounted) return;
+        const cores = Math.max(1, Number(device?.cpuCores) || 8);
+        setCpuCores(cores);
+        setGpuAvailable(Boolean(device?.gpuBackendAvailable));
+        const merged = {
+          ...DEFAULT_SETTINGS,
+          ...saved,
+          threads: Math.min(Number(saved?.threads) || Math.min(6, cores), cores),
+          threadsBatch: Math.min(Number(saved?.threadsBatch) || cores, cores),
+          gpuLayers: device?.gpuBackendAvailable ? Number(saved?.gpuLayers) || 0 : 0,
+        };
+        setSettings(merged);
+        setModels(Array.isArray(storedModels) ? storedModels : []);
+        setSettingsReady(true);
+      } catch (error) {
+        if (mounted) {
+          setCpuCores(8);
+          setStatus('Não foi possível ler as configurações do motor: ' + (error?.message || 'erro nativo'));
+          setSettingsReady(true);
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener('QuazyToken', event => {
       const active = activeRequest.current;
       if (!active || event?.requestId !== active.requestId || typeof event?.text !== 'string') return;
       setMessages(current => current.map(item =>
-        item.id === active.messageId ? {...item, text: event.text, streaming: true} : item,
+        item.id === active.messageId ? {...item, text: item.text + event.text, streaming: true} : item,
       ));
     });
     return () => subscription.remove();
   }, []);
 
+  useEffect(() => {
+    if (settingsReady) Native.saveEngineSettings(settings).catch(() => {});
+  }, [settings, settingsReady]);
+
   useEffect(() => () => {
     try { Native?.releaseModel?.(); } catch (_) {}
   }, []);
 
-  const chooseModel = async () => {
-    if (!Native) {
-      setStatus('Módulo nativo indisponível nesta compilação.');
-      return;
+  const updateSetting = (key, value) => setSettings(current => ({...current, [key]: value}));
+
+  const refreshModels = async () => {
+    const result = await Native.listModels();
+    setModels(Array.isArray(result) ? result : []);
+  };
+
+  const loadModelDirect = async name => {
+    const result = await Native.loadModel(name, settings);
+    if (typeof result !== 'string' || !result.startsWith('OK:')) {
+      throw new Error((result || 'Não foi possível carregar o modelo.').replace(/^ERROR:/, ''));
     }
-    setSettingsOpen(false);
+    setModelReady(true);
+    setModelName(name);
+    loadedConfigRef.current = {...settings};
+    setStatus(result.slice(3).trim());
+    setMessages(current => current.length ? current : [{
+      id: 'welcome',
+      role: 'assistant',
+      text: 'Modelo pronto. Suas mensagens são processadas localmente neste aparelho.',
+    }]);
+    await refreshModels();
+  };
+
+  const loadStoredModel = async name => {
+    if (busy) return;
     setBusy(true);
-    setStatus('Abrindo arquivo e carregando o modelo…');
+    setStatus('Carregando modelo da biblioteca do app…');
     try {
-      const result = await Native.pickAndLoadModel();
-      if (result === 'CANCELLED') {
-        setStatus('Seleção cancelada.');
-      } else if (typeof result === 'string' && result.startsWith('OK:')) {
-        setModelReady(true);
-        setStatus(result.slice(3).trim());
-        setMessages(current => current.length ? current : [{
-          id: 'welcome',
-          role: 'assistant',
-          text: 'Modelo pronto. Suas mensagens são processadas localmente neste aparelho.',
-        }]);
-      } else {
-        setModelReady(false);
-        setStatus((result || 'Não foi possível carregar este modelo.').replace(/^ERROR:/, ''));
-      }
+      await loadModelDirect(name);
+      setSettingsOpen(false);
     } catch (error) {
       setModelReady(false);
-      setStatus(error?.message || 'Falha ao abrir ou carregar o modelo.');
+      setStatus(error?.message || 'Falha ao carregar o modelo.');
+      Alert.alert('Não foi possível carregar', error?.message || 'Confira o arquivo e as opções de memória.');
     } finally {
       setBusy(false);
     }
   };
+
+  const importModel = async () => {
+    if (busy) return;
+    setBusy(true);
+    setStatus('Importando GGUF para a biblioteca local…');
+    try {
+      const name = await Native.pickAndImportModel();
+      if (name === 'CANCELLED') {
+        setStatus('Importação cancelada.');
+        return;
+      }
+      await refreshModels();
+      setStatus('Modelo salvo na biblioteca. Carregando…');
+      await loadModelDirect(name);
+      setSettingsOpen(false);
+    } catch (error) {
+      setStatus(error?.message || 'Falha ao importar o modelo.');
+      Alert.alert('Falha ao importar modelo', error?.message || 'O arquivo não pôde ser copiado.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteStoredModel = name => {
+    Alert.alert('Remover modelo', 'Excluir ' + name + ' da pasta privada do Quazy AI?', [
+      {text: 'Cancelar', style: 'cancel'},
+      {
+        text: 'Excluir',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await Native.deleteModel(name);
+            await refreshModels();
+          } catch (error) {
+            Alert.alert('Não foi possível excluir', error?.message || 'Erro ao remover arquivo.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const engineNeedsReload = Boolean(
+    modelReady && loadedConfigRef.current &&
+    ENGINE_KEYS.some(key => loadedConfigRef.current[key] !== settings[key]),
+  );
 
   const sendMessage = async () => {
     const text = prompt.trim();
@@ -100,7 +224,15 @@ export default function App() {
     setStatus('Gerando resposta no aparelho…');
 
     try {
-      const result = await Native.generate(text, maxTokens, temperature, topP, requestId);
+      const result = await Native.generate(
+        text,
+        settings.maxTokens,
+        settings.topK,
+        settings.temperature,
+        settings.topP,
+        settings.repeatPenalty,
+        requestId,
+      );
       const answer = typeof result?.answer === 'string' ? result.answer.trim() : '';
       setMessages(current => current.map(item =>
         item.id === messageId
@@ -130,8 +262,8 @@ export default function App() {
     setSettingsOpen(false);
   };
 
-  const Chip = ({label, selected, onPress}) => (
-    <Pressable onPress={onPress} style={[s.chip, selected && s.chipSelected]}>
+  const Chip = ({label, selected, onPress, disabled}) => (
+    <Pressable disabled={disabled} onPress={onPress} style={[s.chip, selected && s.chipSelected, disabled && s.disabled]}>
       <Text style={[s.chipText, selected && s.chipTextSelected]}>{label}</Text>
     </Pressable>
   );
@@ -156,6 +288,9 @@ export default function App() {
     );
   };
 
+  const threadOptions = [1, 2, 4, 6, 8].filter(value => value <= cpuCores);
+  const ubatchOptions = [32, 64, 128, 256].filter(value => value <= settings.batchSize);
+
   return (
     <View style={s.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -175,7 +310,7 @@ export default function App() {
 
       <View style={s.chatBar}>
         <Text style={s.chatTitle}>Conversa</Text>
-        <Text style={s.chatMeta}>{busy ? 'Gerando resposta' : tokenStats || (modelReady ? 'No dispositivo' : 'Offline')}</Text>
+        <Text style={s.chatMeta}>{busy ? 'Processando' : tokenStats || (modelReady ? modelName : 'Biblioteca local')}</Text>
       </View>
 
       <FlatList
@@ -193,11 +328,11 @@ export default function App() {
             <Text style={s.emptyText}>
               {modelReady
                 ? 'Seu modelo está pronto. Envie uma mensagem para começar.'
-                : 'Abra o menu para escolher um modelo GGUF e conversar com sua IA local.'}
+                : 'Importe um GGUF. Ele ficará guardado na biblioteca do Quazy AI para os próximos usos.'}
             </Text>
             {!modelReady && (
               <Pressable onPress={() => setSettingsOpen(true)} style={s.emptyButton}>
-                <Text style={s.emptyButtonText}>Configurar modelo</Text>
+                <Text style={s.emptyButtonText}>Abrir biblioteca</Text>
               </Pressable>
             )}
           </View>
@@ -236,57 +371,152 @@ export default function App() {
             <View style={s.sheetHandle} />
             <View style={s.sheetHeader}>
               <View>
-                <Text style={s.sheetTitle}>Configurações</Text>
-                <Text style={s.sheetSubtitle}>Modelo e geração local</Text>
+                <Text style={s.sheetTitle}>Motor e modelos</Text>
+                <Text style={s.sheetSubtitle}>Biblioteca local e desempenho</Text>
               </View>
               <Pressable onPress={() => setSettingsOpen(false)} style={s.closeButton}>
                 <Text style={s.closeGlyph}>×</Text>
               </Pressable>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={s.sectionTitle}>MODELO</Text>
-              <View style={s.modelSetting}>
-                <View style={s.modelSettingCopy}>
-                  <Text style={s.settingName}>{modelReady ? 'Modelo carregado' : 'Nenhum modelo selecionado'}</Text>
-                  <Text style={s.settingHint}>{modelReady ? status : 'Selecione um arquivo .gguf do aparelho.'}</Text>
+              <Text style={s.sectionTitle}>BIBLIOTECA DE MODELOS</Text>
+              <Pressable onPress={importModel} disabled={busy} style={[s.importButton, busy && s.disabled]}>
+                {busy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={s.importGlyph}>＋</Text>}
+                <Text style={s.importButtonText}>Importar arquivo GGUF</Text>
+              </Pressable>
+              <Text style={s.settingHint}>Os arquivos são copiados para o armazenamento privado do app e permanecem lá entre aberturas.</Text>
+              {models.length === 0 ? (
+                <Text style={s.emptyModels}>Nenhum modelo salvo ainda.</Text>
+              ) : models.map(model => (
+                <View key={model.name} style={s.modelItem}>
+                  <View style={s.modelItemCopy}>
+                    <Text style={s.modelItemName} numberOfLines={1}>{model.name}</Text>
+                    <Text style={s.settingHint}>{formatSize(model.sizeBytes)}{model.loaded ? ' · carregado' : ''}</Text>
+                  </View>
+                  <Pressable onPress={() => loadStoredModel(model.name)} disabled={busy} style={[s.modelLoadButton, busy && s.disabled]}>
+                    <Text style={s.modelLoadText}>{model.loaded ? 'Ativo' : 'Carregar'}</Text>
+                  </Pressable>
+                  <Pressable onPress={() => deleteStoredModel(model.name)} disabled={busy || model.loaded} style={[s.deleteModelButton, (busy || model.loaded) && s.disabled]}>
+                    <Text style={s.deleteModelText}>×</Text>
+                  </Pressable>
                 </View>
-                <Pressable onPress={chooseModel} disabled={busy} style={[s.secondaryButton, busy && s.disabled]}>
-                  <Text style={s.secondaryButtonText}>{modelReady ? 'Trocar' : 'Escolher'}</Text>
-                </Pressable>
+              ))}
+
+              <Text style={s.sectionTitle}>CPU</Text>
+              <Text style={s.settingName}>Threads de geração: {settings.threads}</Text>
+              <Text style={s.settingHint}>Usadas na geração de um token por vez. O aparelho informou {cpuCores} CPUs disponíveis.</Text>
+              <View style={s.chipRow}>
+                {threadOptions.map(value => (
+                  <Chip key={value} label={String(value)} selected={settings.threads === value} onPress={() => updateSetting('threads', value)} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Threads de prompt/batch: {settings.threadsBatch}</Text>
+              <Text style={s.settingHint}>Mais threads podem acelerar a leitura inicial do prompt.</Text>
+              <View style={s.chipRow}>
+                {threadOptions.map(value => (
+                  <Chip key={value} label={String(value)} selected={settings.threadsBatch === value} onPress={() => updateSetting('threadsBatch', value)} />
+                ))}
+              </View>
+
+              <Text style={s.sectionTitle}>CONTEXTO E MEMÓRIA</Text>
+              <Text style={s.settingName}>Contexto (tokens)</Text>
+              <View style={s.chipRow}>
+                {[1024, 2048, 4096, 8192].map(value => (
+                  <Chip key={value} label={String(value)} selected={settings.contextSize === value} onPress={() => updateSetting('contextSize', value)} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Batch size: {settings.batchSize}</Text>
+              <View style={s.chipRow}>
+                {[128, 256, 512].map(value => (
+                  <Chip key={value} label={String(value)} selected={settings.batchSize === value} onPress={() => {
+                    setSettings(current => ({...current, batchSize: value, ubatchSize: Math.min(current.ubatchSize, value)}));
+                  }} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Micro-batch: {settings.ubatchSize}</Text>
+              <View style={s.chipRow}>
+                {ubatchOptions.map(value => (
+                  <Chip key={value} label={String(value)} selected={settings.ubatchSize === value} onPress={() => updateSetting('ubatchSize', value)} />
+                ))}
+              </View>
+              <View style={s.switchRow}>
+                <View style={s.switchCopy}>
+                  <Text style={s.settingName}>Memory map (mmap)</Text>
+                  <Text style={s.settingHint}>Recomendado para carregar modelos sem duplicar toda a leitura do arquivo.</Text>
+                </View>
+                <Switch value={settings.useMmap} onValueChange={value => updateSetting('useMmap', value)} />
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Cache KV</Text>
+              <Text style={s.settingHint}>F16 prioriza compatibilidade; Q8_0 ou Q4_0 reduzem memória do contexto.</Text>
+              <View style={s.chipRow}>
+                {['f16', 'q8_0', 'q4_0'].map(value => (
+                  <Chip key={value} label={value.toUpperCase()} selected={settings.cacheType === value} onPress={() => updateSetting('cacheType', value)} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Flash Attention</Text>
+              <View style={s.chipRow}>
+                {['auto', 'off'].map(value => (
+                  <Chip key={value} label={value === 'auto' ? 'Auto' : 'Desligado'} selected={settings.flashAttention === value} onPress={() => updateSetting('flashAttention', value)} />
+                ))}
+              </View>
+
+              <Text style={s.sectionTitle}>GPU</Text>
+              <View style={s.gpuCard}>
+                <Text style={s.settingName}>Camadas GPU: 0</Text>
+                <Text style={s.settingHint}>
+                  {gpuAvailable
+                    ? 'Backend de GPU detectado. As camadas GPU serão habilitadas em uma configuração compatível.'
+                    : 'Este APK ainda é CPU-only. O controle fica em 0 porque OpenCL/Vulkan não foram incluídos/validados neste build.'}
+                </Text>
               </View>
 
               <Text style={s.sectionTitle}>GERAÇÃO</Text>
-              <Text style={s.settingName}>Tamanho da resposta</Text>
-              <Text style={s.settingHint}>Limite de tokens por mensagem. Valores menores respondem mais rápido.</Text>
+              <Text style={s.settingName}>Máximo de tokens: {settings.maxTokens}</Text>
               <View style={s.chipRow}>
-                {[64, 128, 256].map(value => (
-                  <Chip key={value} label={value + ' tokens'} selected={maxTokens === value} onPress={() => setMaxTokens(value)} />
+                {[64, 128, 256, 512].map(value => (
+                  <Chip key={value} label={String(value)} selected={settings.maxTokens === value} onPress={() => updateSetting('maxTokens', value)} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Temperatura: {settings.temperature.toFixed(1)}</Text>
+              <View style={s.chipRow}>
+                {[0.2, 0.5, 0.7, 1.0].map(value => (
+                  <Chip key={value} label={value.toFixed(1)} selected={settings.temperature === value} onPress={() => updateSetting('temperature', value)} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Top-k: {settings.topK}</Text>
+              <View style={s.chipRow}>
+                {[20, 40, 80, 0].map(value => (
+                  <Chip key={value} label={value === 0 ? 'Off' : String(value)} selected={settings.topK === value} onPress={() => updateSetting('topK', value)} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Top-p: {settings.topP.toFixed(2)}</Text>
+              <View style={s.chipRow}>
+                {[0.8, 0.9, 0.95, 1.0].map(value => (
+                  <Chip key={value} label={value.toFixed(2)} selected={settings.topP === value} onPress={() => updateSetting('topP', value)} />
+                ))}
+              </View>
+              <Text style={[s.settingName, s.settingGap]}>Penalidade de repetição: {settings.repeatPenalty.toFixed(2)}</Text>
+              <View style={s.chipRow}>
+                {[1.0, 1.05, 1.1, 1.15].map(value => (
+                  <Chip key={value} label={value.toFixed(2)} selected={settings.repeatPenalty === value} onPress={() => updateSetting('repeatPenalty', value)} />
                 ))}
               </View>
 
-              <Text style={[s.settingName, s.settingGap]}>Criatividade</Text>
-              <Text style={s.settingHint}>Temperatura mais alta aumenta a variedade das respostas.</Text>
-              <View style={s.chipRow}>
-                {[0.3, 0.7, 1.0].map(value => (
-                  <Chip key={value} label={String(value.toFixed(1))} selected={temperature === value} onPress={() => setTemperature(value)} />
-                ))}
-              </View>
-
-              <Text style={[s.settingName, s.settingGap]}>Top-p</Text>
-              <Text style={s.settingHint}>Controla a seleção entre os tokens mais prováveis.</Text>
-              <View style={s.chipRow}>
-                {[0.8, 0.9, 0.95].map(value => (
-                  <Chip key={value} label={String(value)} selected={topP === value} onPress={() => setTopP(value)} />
-                ))}
-              </View>
-
+              {engineNeedsReload && (
+                <View style={s.reloadNotice}>
+                  <Text style={s.reloadText}>As opções de CPU, contexto e memória mudaram. Recarregue o modelo para aplicá-las.</Text>
+                  <Pressable onPress={() => loadStoredModel(modelName)} disabled={busy} style={s.reloadButton}>
+                    <Text style={s.reloadButtonText}>Aplicar e recarregar</Text>
+                  </Pressable>
+                </View>
+              )}
               <Pressable onPress={clearConversation} disabled={busy} style={[s.clearButton, busy && s.disabled]}>
                 <Text style={s.clearButtonText}>Limpar conversa</Text>
               </Pressable>
               <Pressable onPress={() => setSettingsOpen(false)} style={s.doneButton}>
                 <Text style={s.doneButtonText}>Concluir</Text>
               </Pressable>
-              <Text style={s.footerNote}>As alterações de geração são aplicadas na próxima mensagem. O modelo permanece no aparelho.</Text>
+              <Text style={s.footerNote}>As opções ficam salvas no aparelho. Threads, contexto, batch e cache são aplicados ao carregar o modelo. Temperatura, top-k, top-p e penalidade são aplicados na próxima mensagem.</Text>
             </ScrollView>
           </View>
         </Pressable>
@@ -310,7 +540,7 @@ const s = StyleSheet.create({
   menuGlyph: {fontSize: 19, color: '#50536A', fontWeight: '900', letterSpacing: 1},
   chatBar: {height: 44, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
   chatTitle: {fontSize: 13, color: '#24263A', fontWeight: '800'},
-  chatMeta: {fontSize: 10, color: '#969BAB', maxWidth: '70%'},
+  chatMeta: {fontSize: 10, color: '#969BAB', maxWidth: '72%'},
   messages: {paddingHorizontal: 16, paddingTop: 8, paddingBottom: 18},
   emptyList: {flexGrow: 1, justifyContent: 'center'},
   empty: {alignItems: 'center', paddingHorizontal: 34, paddingBottom: 32},
@@ -341,30 +571,44 @@ const s = StyleSheet.create({
   pressed: {opacity: 0.82, transform: [{scale: 0.98}]},
   privacy: {textAlign: 'center', fontSize: 10, color: '#A4A8B4', paddingBottom: 8, paddingTop: 2},
   modalBackdrop: {flex: 1, backgroundColor: 'rgba(18, 19, 35, 0.30)', justifyContent: 'flex-end'},
-  menuSheet: {maxHeight: '88%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 28},
+  menuSheet: {maxHeight: '92%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 24},
   sheetHandle: {alignSelf: 'center', width: 38, height: 4, borderRadius: 4, backgroundColor: '#DFE0E8', marginTop: 10, marginBottom: 17},
   sheetHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18},
   sheetTitle: {fontSize: 20, fontWeight: '800', color: '#202238'},
   sheetSubtitle: {fontSize: 12, color: '#8B90A1', marginTop: 3},
   closeButton: {width: 34, height: 34, borderRadius: 12, backgroundColor: '#F5F5F8', alignItems: 'center', justifyContent: 'center'},
   closeGlyph: {fontSize: 25, color: '#62667A', lineHeight: 28},
-  sectionTitle: {fontSize: 10, fontWeight: '900', color: '#9297A8', letterSpacing: 1.1, marginTop: 13, marginBottom: 10},
-  modelSetting: {flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F8FC', borderRadius: 15, padding: 13, marginBottom: 7},
-  modelSettingCopy: {flex: 1, paddingRight: 9},
+  sectionTitle: {fontSize: 10, fontWeight: '900', color: '#9297A8', letterSpacing: 1.1, marginTop: 18, marginBottom: 10},
   settingName: {fontSize: 13, fontWeight: '700', color: '#27293D'},
   settingHint: {fontSize: 11, lineHeight: 16, color: '#858A9B', marginTop: 4},
-  secondaryButton: {backgroundColor: '#635BDB', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10},
-  secondaryButtonText: {fontSize: 11, fontWeight: '800', color: '#FFFFFF'},
+  importButton: {backgroundColor: '#635BDB', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 13, borderRadius: 13},
+  importGlyph: {color: '#FFFFFF', fontSize: 20, marginRight: 7},
+  importButtonText: {color: '#FFFFFF', fontSize: 12, fontWeight: '800'},
+  emptyModels: {fontSize: 12, color: '#9A9EAC', paddingVertical: 14, textAlign: 'center'},
+  modelItem: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F1F5'},
+  modelItemCopy: {flex: 1, paddingRight: 8},
+  modelItemName: {fontSize: 12, fontWeight: '700', color: '#27293D'},
+  modelLoadButton: {backgroundColor: '#EFEEFF', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 8},
+  modelLoadText: {fontSize: 10, color: '#5D55CA', fontWeight: '800'},
+  deleteModelButton: {width: 30, height: 30, borderRadius: 9, backgroundColor: '#F7F7FA', marginLeft: 7, alignItems: 'center', justifyContent: 'center'},
+  deleteModelText: {fontSize: 20, color: '#8C91A1', lineHeight: 22},
   chipRow: {flexDirection: 'row', flexWrap: 'wrap', marginTop: 9, marginBottom: 4},
   chip: {paddingHorizontal: 13, paddingVertical: 9, borderRadius: 11, backgroundColor: '#F3F4F8', marginRight: 8, marginBottom: 5},
   chipSelected: {backgroundColor: '#EFEEFF', borderWidth: 1, borderColor: '#C9C5FF'},
   chipText: {fontSize: 11, fontWeight: '700', color: '#73788B'},
   chipTextSelected: {color: '#5D55CA'},
   settingGap: {marginTop: 14},
+  switchRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingVertical: 8},
+  switchCopy: {flex: 1, paddingRight: 14},
+  gpuCard: {padding: 13, backgroundColor: '#F7F7FA', borderRadius: 13},
+  reloadNotice: {marginTop: 18, padding: 13, backgroundColor: '#F4F3FF', borderRadius: 13},
+  reloadText: {fontSize: 11, lineHeight: 16, color: '#625BC8'},
+  reloadButton: {alignSelf: 'flex-start', marginTop: 10, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 9, backgroundColor: '#635BDB'},
+  reloadButtonText: {fontSize: 11, fontWeight: '800', color: '#FFFFFF'},
   clearButton: {alignItems: 'center', paddingVertical: 13, borderRadius: 12, marginTop: 20, backgroundColor: '#F7F7FA'},
   clearButtonText: {fontSize: 12, fontWeight: '700', color: '#72778A'},
   doneButton: {alignItems: 'center', paddingVertical: 14, borderRadius: 13, marginTop: 9, backgroundColor: '#635BDB'},
   doneButtonText: {fontSize: 13, fontWeight: '800', color: '#FFFFFF'},
   footerNote: {fontSize: 10, lineHeight: 15, color: '#A0A4B1', textAlign: 'center', marginTop: 11, marginBottom: 7},
-  disabled: {opacity: 0.55},
+  disabled: {opacity: 0.5},
 });
