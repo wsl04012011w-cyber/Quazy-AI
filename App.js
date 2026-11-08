@@ -174,13 +174,13 @@ export default function App() {
         toValue: 1,
         duration: 180,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.timing(dotBounce, {
         toValue: 0,
         duration: 180,
         easing: Easing.in(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]));
     loop.start();
@@ -482,17 +482,17 @@ export default function App() {
           </View>
         )}
         {Boolean(answer) && (
-          <View style={s.assistantTextLine}>
-            <Text style={[s.message, s.assistantMessage, item.error && s.errorMessage]}>{answer.trimStart()}</Text>
-            {item.streaming && (
-              <Animated.View
+          <Text style={[s.message, s.assistantMessage, item.error && s.errorMessage]}>
+            {answer.trimStart()}
+            {item.streaming ? (
+              <Animated.Text
                 style={[
                   s.liveDot,
-                  {transform: [{translateY: dotBounce.interpolate({inputRange: [0, 1], outputRange: [0, -5]})}]},
+                  {fontSize: dotBounce.interpolate({inputRange: [0, 1], outputRange: [7, 11]})},
                 ]}
-              />
-            )}
-          </View>
+              >●</Animated.Text>
+            ) : null}
+          </Text>
         )}
         {item.streaming && (
           <View style={s.streamStatus}>
@@ -559,7 +559,7 @@ export default function App() {
         }
       />
 
-      <KeyboardAvoidingView style={s.composerDock} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+      <KeyboardAvoidingView style={s.composerDock} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
         <View style={s.composer}>
           <TextInput
             value={prompt}
@@ -870,8 +870,7 @@ const s = StyleSheet.create({
   composerDock: {width: '100%'},
   newChatButton: {width: 34, height: 34, borderRadius: 11, backgroundColor: '#F1F0FF', alignItems: 'center', justifyContent: 'center', marginLeft: 8},
   newChatGlyph: {fontSize: 22, color: '#635BDB', lineHeight: 26},
-  assistantTextLine: {width: '100%', flexDirection: 'row', alignItems: 'flex-end'},
-  liveDot: {width: 7, height: 7, borderRadius: 4, backgroundColor: '#20C879', marginLeft: 7, marginBottom: 5, flexShrink: 0},
+  liveDot: {color: '#20C879', marginLeft: 4, includeFontPadding: false},
   composer: {marginHorizontal: 14, marginTop: 7, marginBottom: 5, borderWidth: 1, borderColor: '#E8E9F0', borderRadius: 18, padding: 7, flexDirection: 'row', alignItems: 'flex-end'},
   input: {flex: 1, maxHeight: 116, minHeight: 42, paddingHorizontal: 10, paddingTop: 11, paddingBottom: 9, color: '#25273A', fontSize: 14},
   send: {height: 42, width: 44, borderRadius: 13, backgroundColor: '#635BDB', alignItems: 'center', justifyContent: 'center'},
