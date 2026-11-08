@@ -324,7 +324,7 @@ export default function App() {
     setMessages(current => [
       ...current,
       {id: requestId + '-user', role: 'user', text},
-      {id: messageId, role: 'assistant', text: '', streaming: true},
+      {id: messageId, role: 'assistant', text: '', streaming: true, thinkingExpanded: true},
     ]);
     activeRequest.current = {requestId, messageId};
     setBusy(true);
@@ -409,7 +409,7 @@ export default function App() {
               style={s.thinkingToggle}
             >
               <Text style={s.thinkingChevron}>{showThinking ? '⌄' : '›'}</Text>
-              <Text style={s.thinkingTitle}>Pensamento</Text>
+              <Text style={s.thinkingTitle}>{item.streaming && parsed.thinkingOpen ? 'Pensando…' : 'Pensamento do modelo'}</Text>
               {item.streaming && parsed.thinkingOpen && <ActivityIndicator size="small" color="#8A85C9" />}
             </Pressable>
             {showThinking && Boolean(thinking) && (
@@ -448,7 +448,7 @@ export default function App() {
             <Text style={s.subtitle}>{modelReady ? 'Modelo local pronto' : 'Assistente local'}</Text>
           </View>
         </View>
-        <Pressable onPress={() => setMenuOpen(true)} style={s.menuButton} accessibilityLabel="Abrir configurações">
+        <Pressable onPress={() => setMenuOpen(true)} style={s.menuButton} accessibilityLabel="Abrir menu">
           <Text style={s.menuGlyph}>•••</Text>
         </Pressable>
       </View>
