@@ -1,7 +1,6 @@
 package com.quazy.ai
 
 import android.app.Activity
-import android.app.ActivityManager
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -13,6 +12,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -76,8 +76,8 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
             requireNotNull(input) { "Não foi possível abrir o arquivo selecionado." }
             destination.outputStream().buffered().use { output -> input.copyTo(output, 1024 * 1024) }
         }
-        val memory = ActivityManager.MemoryInfo()
-        (context.getSystemService(Activity.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
+        val memory = android.app.ActivityManager.MemoryInfo()
+        (context.getSystemService(Activity.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
         return nativeBridge().nativeLoadModel(destination.absolutePath, 0, 2048, memory.availMem)
     }
 
@@ -86,12 +86,36 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
     }.getOrNull()
 
+    private fun emitToken(requestId: String, text: String) {
+        context.runOnJSQueueThread {
+            val event: WritableMap = Arguments.createMap().apply {
+                putString("requestId", requestId)
+                putString("text", text)
+            }
+            context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("QuazyToken", event)
+        }
+    }
+
     @ReactMethod
-    fun generate(prompt: String, maxTokens: Int, promise: Promise) {
+    fun generate(prompt: String, maxTokens: Int, temperature: Double, topP: Double, requestId: String, promise: Promise) {
         worker.execute {
             try {
                 val native = nativeBridge()
-                val answer = native.nativeGenerate(prompt, maxTokens.coerceIn(1, 512))
+                val answer = native.nativeGenerate(
+                    prompt,
+                    maxTokens.coerceIn(1, 512),
+                    temperature.toFloat().coerceIn(0.05f, 2.0f),
+                    topP.toFloat().coerceIn(0.1f, 1.0f),
+                    object : NativeTokenCallback {
+                        override fun onToken(text: String) {
+                            emitToken(requestId, text)
+                        }
+                    }
+                )
+                if (answer.startsWith("ERROR:")) {
+                    throw IllegalStateException(answer.removePrefix("ERROR:").trim())
+                }
                 val result: WritableMap = Arguments.createMap().apply {
                     putString("answer", answer)
                     putString("stats", native.nativeTokenStats())
