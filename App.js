@@ -232,7 +232,7 @@ export default function App() {
 
       <Modal visible={settingsOpen} transparent animationType="slide" onRequestClose={() => setSettingsOpen(false)}>
         <Pressable style={s.modalBackdrop} onPress={() => setSettingsOpen(false)}>
-          <Pressable style={s.menuSheet} onPress={() => {}}>
+          <View style={s.menuSheet}>
             <View style={s.sheetHandle} />
             <View style={s.sheetHeader}>
               <View>
@@ -288,7 +288,7 @@ export default function App() {
               </Pressable>
               <Text style={s.footerNote}>As alterações de geração são aplicadas na próxima mensagem. O modelo permanece no aparelho.</Text>
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
     </View>
