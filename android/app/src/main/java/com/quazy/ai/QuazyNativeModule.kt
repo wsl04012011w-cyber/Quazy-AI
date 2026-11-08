@@ -206,9 +206,9 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
         val defaults = Arguments.createMap().apply {
             putInt("threads", minOf(4, cores))
             putInt("threadsBatch", minOf(4, cores))
-            putInt("contextSize", 2048)
-            putInt("batchSize", 512)
-            putInt("ubatchSize", 128)
+            putInt("contextSize", 4096)
+            putInt("batchSize", 1024)
+            putInt("ubatchSize", 256)
             putInt("gpuLayers", 0)
             putBoolean("useMmap", true)
             putString("cacheType", "f16")
@@ -264,8 +264,8 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
                 (context.getSystemService(Activity.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
                 val threads = intOption(options, "threads", minOf(4, Runtime.getRuntime().availableProcessors())).coerceIn(1, 32)
                 val threadsBatch = intOption(options, "threadsBatch", Runtime.getRuntime().availableProcessors()).coerceIn(1, 32)
-                val contextSize = intOption(options, "contextSize", 2048).coerceIn(512, 8192)
-                val batchSize = intOption(options, "batchSize", 512).coerceIn(32, 2048)
+                val contextSize = intOption(options, "contextSize", 4096).coerceIn(512, 32768)
+                val batchSize = intOption(options, "batchSize", 1024).coerceIn(32, 4096)
                 val ubatchSize = intOption(options, "ubatchSize", 128).coerceIn(16, batchSize)
                 val gpuLayers = intOption(options, "gpuLayers", 0).coerceIn(0, 128)
                 val useMmap = boolOption(options, "useMmap", true)
@@ -339,7 +339,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
                 val native = nativeBridge()
                 val answer = native.nativeGenerate(
                     prompt,
-                    maxTokens.coerceIn(1, 512),
+                    maxTokens.coerceIn(1, 4096),
                     topK.coerceIn(0, 200),
                     temperature.toFloat().coerceIn(0.05f, 2.0f),
                     topP.toFloat().coerceIn(0.1f, 1.0f),

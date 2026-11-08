@@ -238,10 +238,12 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
         }
         QLOGE("llama.cpp %s | registered backends: %s", llama_version(), backend_names.c_str());
 
-        const int32_t ctx_size = std::clamp<int32_t>(requested_context_size, 512, 8192);
+        const uint32_t model_context_limit = llama_model_n_ctx_train(g_model);
+        const int32_t safe_model_context = static_cast<int32_t>(std::min<uint32_t>(model_context_limit > 0 ? model_context_limit : 8192U, 32768U));
+        const int32_t ctx_size = std::clamp<int32_t>(requested_context_size, 512, std::max(512, safe_model_context));
         const int32_t threads = std::clamp<int32_t>(requested_threads, 1, 32);
         const int32_t threads_batch = std::clamp<int32_t>(requested_threads_batch, 1, 32);
-        const int32_t batch_size = std::clamp<int32_t>(requested_batch_size, 32, 2048);
+        const int32_t batch_size = std::clamp<int32_t>(requested_batch_size, 32, 4096);
         const int32_t ubatch_size = std::clamp<int32_t>(requested_ubatch_size, 16, batch_size);
         const int32_t gpu_layers = std::clamp<int32_t>(requested_gpu_layers, 0, 128);
 
@@ -384,7 +386,7 @@ Java_com_quazy_ai_NativeBridge_nativeGenerate(
         }
 
         const int32_t max_tokens = std::clamp<int32_t>(
-            max_tokens_value, 1, static_cast<int32_t>(context_limit - token_count - 1)
+            max_tokens_value, 1, std::min<int32_t>(4096, static_cast<int32_t>(context_limit - token_count - 1))
         );
         const int32_t top_k = std::clamp<int32_t>(top_k_value, 0, 200);
         const float temperature = std::clamp<float>(temperature_value, 0.05f, 2.0f);
