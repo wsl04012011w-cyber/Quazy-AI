@@ -60,7 +60,7 @@ function parseAssistantOutput(rawText) {
 
   // Supports XML-like tags (<think>, <Thinking>, <analysis>, <reasoning>...),
   // common reasoning tokens and Harmony-style channel markers.
-  const markerPattern = /<\|(?:begin_of_thought|start_of_thought|startofthought)\|>|<\|(?:end_of_thought|endofthought|end_thought)\|>|<\|channel\|>\\s*(analysis|final|commentary|justify|confidence|summary)\\b|<\|(analysis|final|commentary)\|>|<\/?([a-z][a-z0-9_-]*)\\s*>/gi;
+  const markerPattern = /<\|(?:begin_of_thought|start_of_thought|startofthought)\|>|<\|(?:end_of_thought|endofthought|end_thought)\|>|<\|channel\|>\s*(analysis|final|commentary|justify|confidence|summary)\b|<\|(analysis|final|commentary)\|>|<\/?([a-z][a-z0-9_-]*)\s*>/gi;
 
   let match;
   while ((match = markerPattern.exec(raw)) !== null) {
