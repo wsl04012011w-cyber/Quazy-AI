@@ -366,6 +366,19 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
     }
 
     @ReactMethod
+    fun unloadModel(promise: Promise) {
+        worker.execute {
+            try {
+                bridge?.nativeReleaseModel()
+                loadedModelName = null
+                promise.resolve(true)
+            } catch (error: Throwable) {
+                promise.reject("E_UNLOAD_MODEL", error.message ?: "Não foi possível descarregar o modelo.", error)
+            }
+        }
+    }
+
+    @ReactMethod
     fun releaseModel() {
         worker.execute {
             runCatching { bridge?.nativeReleaseModel() }
