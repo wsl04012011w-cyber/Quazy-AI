@@ -267,6 +267,7 @@ export default function App() {
     }
     setModelReady(true);
     setModelName(name);
+    setModels(current => current.map(model => ({...model, loaded: model.name === name})));
     loadedConfigRef.current = {...settings};
     setStatus(result.slice(3).trim());
     setMessages(current => current.length ? current : [{
@@ -306,6 +307,7 @@ export default function App() {
       await Native.unloadModel();
       setModelReady(false);
       setModelName('');
+      setModels(current => current.map(model => ({...model, loaded: false})));
       loadedConfigRef.current = null;
       setStatus('Modelo descarregado. O arquivo continua salvo na biblioteca.');
       await refreshModels();
