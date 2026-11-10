@@ -31,7 +31,7 @@ class NativeBridge {
     ): String
 
     external fun nativeTokenStats(): String
-    external fun nativeGpuBackendAvailable(): Boolean
+    external fun nativeGpuBackendAvailable(backendDirectory: String): Boolean
     external fun nativeReleaseModel()
 
     companion object {
