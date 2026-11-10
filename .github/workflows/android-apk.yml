@@ -71,7 +71,10 @@ jobs:
           set -euo pipefail
           git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Hpp.git "$RUNNER_TEMP/Vulkan-Hpp"
           test -f "$RUNNER_TEMP/Vulkan-Hpp/vulkan/vulkan.hpp"
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/Vulkan-Headers"
+          test -f "$RUNNER_TEMP/Vulkan-Headers/include/vulkan/vulkan.h"
           echo "VULKAN_HPP_INCLUDE_DIR=$RUNNER_TEMP/Vulkan-Hpp" >> "$GITHUB_ENV"
+          echo "VULKAN_HEADERS_INCLUDE_DIR=$RUNNER_TEMP/Vulkan-Headers/include" >> "$GITHUB_ENV"
 
       - name: Install Gradle
         shell: bash
