@@ -499,7 +499,10 @@ export default function App() {
               <Animated.Text
                 style={[
                   s.liveDot,
-                  {fontSize: dotBounce.interpolate({inputRange: [0, 1], outputRange: [8, 14]}), lineHeight: dotBounce.interpolate({inputRange: [0, 1], outputRange: [12, 19]}), opacity: dotBounce.interpolate({inputRange: [0, 0.5, 1], outputRange: [0.65, 1, 0.65]})},
+                  {
+                    opacity: dotBounce.interpolate({inputRange: [0, 0.5, 1], outputRange: [0.65, 1, 0.65]}),
+                    transform: [{translateY: dotBounce.interpolate({inputRange: [0, 1], outputRange: [0, -5]})}],
+                  },
                 ]}
               >●</Animated.Text>
             ) : null}
