@@ -34,9 +34,15 @@ set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
 set(GGML_CPU_REPACK ON CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 
-# Keep GPU APIs disabled until their driver libraries are verified on-device.
+# Vulkan is the Android GPU backend. The Android system provides the
+# Vulkan loader/driver (libvulkan.so); the APK packages ggml-vulkan as a
+# dynamically loaded backend and keeps CPU as the universal fallback.
+# OpenCL remains disabled because Adreno OpenCL runtimes are not consistently
+# exposed to third-party apps across Android vendors/firmware.
 set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
-set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+set(GGML_VULKAN_CHECK_RESULTS OFF CACHE BOOL "" FORCE)
+set(GGML_VULKAN_DEBUG OFF CACHE BOOL "" FORCE)
 
 # Use PrismML's maintained llama.cpp fork. It adds the Bonsai-specific
 # low-bit formats (PQ2_0/PTQ1_0) and Hadamard/sign-flip transforms while
