@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# A push can supersede an older build. Avoid multiple expensive native builds
+# racing against one another for the same branch.
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-release:
     name: Build optimized arm64-v8a Release APK with Vulkan
@@ -44,7 +50,19 @@ jobs:
           set -euo pipefail
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.31.6"
           sudo apt-get update
-          sudo apt-get install -y ninja-build libvulkan-dev glslc spirv-headers
+          sudo apt-get install -y ninja-build libvulkan-dev glslc
+
+      - name: Build and install SPIRV-Headers CMake package
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git "$RUNNER_TEMP/SPIRV-Headers"
+          cmake -S "$RUNNER_TEMP/SPIRV-Headers" -B "$RUNNER_TEMP/SPIRV-Headers-build" \
+            -DSPIRV_HEADERS_ENABLE_TESTS=OFF \
+            -DSPIRV_HEADERS_ENABLE_INSTALL=ON \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/spirv-headers-install"
+          cmake --build "$RUNNER_TEMP/SPIRV-Headers-build" --target install --parallel 2
+          echo "CMAKE_PREFIX_PATH=$RUNNER_TEMP/spirv-headers-install" >> "$GITHUB_ENV"
 
       - name: Install Gradle
         shell: bash
