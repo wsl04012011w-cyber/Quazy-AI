@@ -39,10 +39,19 @@ set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
 set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
 
+# Use PrismML's maintained llama.cpp fork. It adds the Bonsai-specific
+# low-bit formats (PQ2_0/PTQ1_0) and Hadamard/sign-flip transforms while
+# preserving the llama C API used by QuazyNative. Pin the same tested release
+# used by PrismML's Bonsai demo instead of tracking a moving branch.
+#
+# Android's NDK build does not bundle an OpenMP runtime; the fork's Android
+# build guidance disables OpenMP and llamafile for arm64-v8a.
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+
 FetchContent_Declare(
     llama_cpp
-    GIT_REPOSITORY https://github.com/ggml-org/llama.cpp.git
-    GIT_TAG v0.9.0
+    GIT_REPOSITORY https://github.com/PrismML-Eng/llama.cpp.git
+    GIT_TAG prism-b10828-a153697
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(llama_cpp)
