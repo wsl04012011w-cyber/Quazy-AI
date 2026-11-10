@@ -63,6 +63,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/spirv-headers-install"
           cmake --build "$RUNNER_TEMP/SPIRV-Headers-build" --target install --parallel 2
           echo "CMAKE_PREFIX_PATH=$RUNNER_TEMP/spirv-headers-install" >> "$GITHUB_ENV"
+          echo "SPIRV_HEADERS_CMAKE_DIR=$RUNNER_TEMP/spirv-headers-install/share/cmake/SPIRV-Headers" >> "$GITHUB_ENV"
 
       - name: Install Gradle
         shell: bash
