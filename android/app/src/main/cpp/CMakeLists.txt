@@ -16,6 +16,12 @@ if(DEFINED ENV{SPIRV_HEADERS_CMAKE_DIR})
     set("SPIRV-Headers_DIR" "$ENV{SPIRV_HEADERS_CMAKE_DIR}" CACHE PATH "SPIRV-Headers CMake package directory" FORCE)
 endif()
 
+# Vulkan's ggml backend includes the header-only Vulkan-Hpp C++ bindings.
+# Supply their host-side headers explicitly to the Android cross-compiler.
+if(DEFINED ENV{VULKAN_HPP_INCLUDE_DIR})
+    include_directories("$ENV{VULKAN_HPP_INCLUDE_DIR}")
+endif()
+
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
