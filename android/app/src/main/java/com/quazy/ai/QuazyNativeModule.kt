@@ -241,7 +241,7 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
                 val memory = ActivityManager.MemoryInfo()
                 (context.getSystemService(Activity.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
                 val cpuCores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-                val gpuBackend = nativeBridge().nativeGpuBackendAvailable()
+                val gpuBackend = nativeBridge().nativeGpuBackendAvailable(context.applicationInfo.nativeLibraryDir)
                 val (gpuName, gpuApi) = detectGpuInfo()
                 val nnapiAvailable = context.packageManager.systemAvailableFeatures
                     .any { it.name == "android.hardware.neuralnetworks" }
