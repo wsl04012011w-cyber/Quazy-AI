@@ -32,7 +32,6 @@ set(GGML_CPU_ARM_ARCH "" CACHE STRING "" FORCE)
 # ARM CPU acceleration.
 set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
 set(GGML_CPU_REPACK ON CACHE BOOL "" FORCE)
-set(GGML_OPENMP ON CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 
 # Keep GPU APIs disabled until their driver libraries are verified on-device.
