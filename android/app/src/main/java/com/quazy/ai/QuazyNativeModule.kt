@@ -4,6 +4,13 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.opengl.EGL14
+import android.opengl.EGLConfig
+import android.opengl.EGLContext
+import android.opengl.EGLDisplay
+import android.opengl.EGLSurface
+import android.opengl.GLES20
 import android.provider.OpenableColumns
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
@@ -169,6 +176,64 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
         }
     }
 
+    private fun detectGpuInfo(): Pair<String, String> {
+        var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
+        var glContext: EGLContext = EGL14.EGL_NO_CONTEXT
+        var surface: EGLSurface = EGL14.EGL_NO_SURFACE
+        try {
+            display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+            if (display == EGL14.EGL_NO_DISPLAY) return "GPU gráfica Android" to "OpenGL ES indisponível"
+            val version = IntArray(2)
+            if (!EGL14.eglInitialize(display, version, 0, version, 1)) {
+                return "GPU gráfica Android" to "Não foi possível consultar o driver OpenGL ES"
+            }
+            val configAttrs = intArrayOf(
+                EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8,
+                EGL14.EGL_BLUE_SIZE, 8, EGL14.EGL_NONE
+            )
+            val configs = arrayOfNulls<EGLConfig>(1)
+            val configCount = IntArray(1)
+            if (!EGL14.eglChooseConfig(display, configAttrs, 0, configs, 0, 1, configCount, 0) ||
+                configCount[0] == 0 || configs[0] == null
+            ) return "GPU gráfica Android" to "OpenGL ES não identificado"
+            val contextAttrs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE)
+            glContext = EGL14.eglCreateContext(display, configs[0], EGL14.EGL_NO_CONTEXT, contextAttrs, 0)
+            val surfaceAttrs = intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE)
+            surface = EGL14.eglCreatePbufferSurface(display, configs[0], surfaceAttrs, 0)
+            if (glContext == EGL14.EGL_NO_CONTEXT || surface == EGL14.EGL_NO_SURFACE ||
+                !EGL14.eglMakeCurrent(display, surface, surface, glContext)
+            ) return "GPU gráfica Android" to "Driver gráfico detectado; nome indisponível"
+            val renderer = GLES20.glGetString(GLES20.GL_RENDERER)?.takeIf { it.isNotBlank() }
+                ?: "GPU gráfica Android"
+            val vendor = GLES20.glGetString(GLES20.GL_VENDOR)?.takeIf { it.isNotBlank() }
+            val glVersion = GLES20.glGetString(GLES20.GL_VERSION)?.takeIf { it.isNotBlank() }
+            val name = if (vendor != null && !renderer.contains(vendor, ignoreCase = true)) "$vendor · $renderer" else renderer
+            return name to (glVersion ?: "OpenGL ES disponível")
+        } catch (_: Throwable) {
+            return "GPU gráfica Android" to "Não foi possível consultar o driver gráfico"
+        } finally {
+            if (display != EGL14.EGL_NO_DISPLAY) {
+                runCatching { EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
+                if (surface != EGL14.EGL_NO_SURFACE) runCatching { EGL14.eglDestroySurface(display, surface) }
+                if (glContext != EGL14.EGL_NO_CONTEXT) runCatching { EGL14.eglDestroyContext(display, glContext) }
+                runCatching { EGL14.eglTerminate(display) }
+            }
+        }
+    }
+
+    private fun detectCpuName(): String {
+        val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else ""
+        if (soc.isNotBlank() && !soc.equals("unknown", ignoreCase = true)) return soc
+        val hardwareLine = runCatching {
+            File("/proc/cpuinfo").useLines { lines ->
+                lines.firstOrNull { it.startsWith("Hardware", ignoreCase = true) || it.startsWith("Model", ignoreCase = true) }
+                    ?.substringAfter(':')?.trim()
+            }
+        }.getOrNull()
+        return hardwareLine?.takeIf { it.isNotBlank() } ?: Build.HARDWARE
+    }
+
     @ReactMethod
     fun getDeviceInfo(promise: Promise) {
         worker.execute {
@@ -176,12 +241,26 @@ class QuazyNativeModule(private val context: ReactApplicationContext) : ReactCon
                 val memory = ActivityManager.MemoryInfo()
                 (context.getSystemService(Activity.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
                 val cpuCores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-                val gpuAvailable = nativeBridge().nativeGpuBackendAvailable()
+                val gpuBackend = nativeBridge().nativeGpuBackendAvailable()
+                val (gpuName, gpuApi) = detectGpuInfo()
+                val nnapiAvailable = context.packageManager.systemAvailableFeatures
+                    .any { it.name == "android.hardware.neuralnetworks" }
                 val result: WritableMap = Arguments.createMap().apply {
                     putInt("cpuCores", cpuCores)
+                    putString("cpuName", detectCpuName())
+                    putString("cpuArchitecture", Build.SUPPORTED_ABIS.firstOrNull() ?: "Desconhecida")
+                    putString("gpuName", gpuName)
+                    putString("gpuApi", gpuApi)
+                    putBoolean("gpuDetected", gpuName.isNotBlank())
+                    putBoolean("gpuBackendAvailable", gpuBackend)
+                    putBoolean("nnapiAvailable", nnapiAvailable)
+                    putString(
+                        "npuStatus",
+                        if (nnapiAvailable) "NNAPI anunciado pelo Android; acelerador NPU dedicado ainda depende do driver."
+                        else "Nenhum recurso NNAPI foi anunciado pelo Android."
+                    )
                     putDouble("availableMemoryBytes", memory.availMem.toDouble())
                     putDouble("totalMemoryBytes", memory.totalMem.toDouble())
-                    putBoolean("gpuBackendAvailable", gpuAvailable)
                 }
                 promise.resolve(result)
             } catch (error: Throwable) {
