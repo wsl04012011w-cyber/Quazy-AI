@@ -65,6 +65,14 @@ jobs:
           echo "CMAKE_PREFIX_PATH=$RUNNER_TEMP/spirv-headers-install" >> "$GITHUB_ENV"
           echo "SPIRV_HEADERS_CMAKE_DIR=$RUNNER_TEMP/spirv-headers-install/share/cmake/SPIRV-Headers" >> "$GITHUB_ENV"
 
+      - name: Install Vulkan-Hpp C++ headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/KhronosGroup/Vulkan-Hpp.git "$RUNNER_TEMP/Vulkan-Hpp"
+          test -f "$RUNNER_TEMP/Vulkan-Hpp/vulkan/vulkan.hpp"
+          echo "VULKAN_HPP_INCLUDE_DIR=$RUNNER_TEMP/Vulkan-Hpp" >> "$GITHUB_ENV"
+
       - name: Install Gradle
         shell: bash
         run: |
