@@ -156,6 +156,7 @@ export default function App() {
   const [models, setModels] = useState([]);
   const [cpuCores, setCpuCores] = useState(8);
   const [gpuAvailable, setGpuAvailable] = useState(false);
+  const [hardwareInfo, setHardwareInfo] = useState(null);
   const [tokenStats, setTokenStats] = useState('');
   const listRef = useRef(null);
   const activeRequest = useRef(null);
@@ -200,6 +201,16 @@ export default function App() {
         const cores = Math.max(1, Number(device?.cpuCores) || 8);
         setCpuCores(cores);
         setGpuAvailable(Boolean(device?.gpuBackendAvailable));
+        setHardwareInfo({
+          cpuName: device?.cpuName || 'CPU não identificada',
+          cpuArchitecture: device?.cpuArchitecture || 'Arquitetura não identificada',
+          gpuName: device?.gpuName || 'GPU não identificada',
+          gpuApi: device?.gpuApi || 'Driver gráfico não consultado',
+          gpuDetected: Boolean(device?.gpuDetected),
+          gpuBackendAvailable: Boolean(device?.gpuBackendAvailable),
+          nnapiAvailable: Boolean(device?.nnapiAvailable),
+          npuStatus: device?.npuStatus || 'Não foi possível consultar o suporte NNAPI.',
+        });
         const savedThreads = Number(saved?.threads) || 4;
         // Earlier builds defaulted to 6 generation threads; migrate that default
         // to 4, which better matches the Termux benchmark on this device.
@@ -707,7 +718,37 @@ export default function App() {
               nestedScrollEnabled
               overScrollMode="never"
             >
-                            <Text style={s.sectionTitle}>CPU</Text>
+              <Text style={s.sectionTitle}>HARDWARE DETECTADO</Text>
+              <View style={s.gpuCard}>
+                <Text style={s.settingName}>CPU · {hardwareInfo?.cpuName || 'Consultando…'}</Text>
+                <Text style={s.settingHint}>
+                  {hardwareInfo?.cpuArchitecture || 'Arquitetura…'} · {cpuCores} núcleos lógicos disponíveis
+                </Text>
+              </View>
+              <View style={[s.gpuCard, {marginTop: 8}]}>
+                <Text style={s.settingName}>GPU · {hardwareInfo?.gpuName || 'Consultando…'}</Text>
+                <Text style={s.settingHint}>
+                  {hardwareInfo?.gpuApi || 'Consultando driver gráfico…'}
+                </Text>
+                <Text style={s.settingHint}>
+                  {hardwareInfo?.gpuBackendAvailable
+                    ? 'Backend de inferência GPU disponível neste APK.'
+                    : 'GPU identificada não significa aceleração de IA ativa: este APK ainda está em CPU-only.'}
+                </Text>
+              </View>
+              <View style={[s.gpuCard, {marginTop: 8}]}>
+                <Text style={s.settingName}>
+                  NPU · {hardwareInfo?.nnapiAvailable ? 'NNAPI disponível' : 'Não confirmada'}
+                </Text>
+                <Text style={s.settingHint}>
+                  {hardwareInfo?.npuStatus || 'Consultando recursos neurais do Android…'}
+                </Text>
+                <Text style={s.settingHint}>
+                  A detecção NNAPI é apenas uma indicação do sistema; a aceleração NPU real dependerá de identificar e validar o driver do fabricante.
+                </Text>
+              </View>
+
+              <Text style={s.sectionTitle}>CPU</Text>
               <Text style={s.settingName}>Threads de geração: {settings.threads}</Text>
               <Text style={s.settingHint}>Usadas na geração de um token por vez. O aparelho informou {cpuCores} CPUs disponíveis.</Text>
               <View style={s.chipRow}>
