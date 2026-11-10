@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build-release:
-    name: Build optimized arm64-v8a Release APK
+    name: Build optimized arm64-v8a Release APK with Vulkan
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.31.6"
           sudo apt-get update
-          sudo apt-get install -y ninja-build
+          sudo apt-get install -y ninja-build libvulkan-dev glslc spirv-headers
 
       - name: Install Gradle
         shell: bash
@@ -85,7 +85,7 @@ jobs:
           gradle --no-daemon --stacktrace --max-workers=2 -p android \
             :app:assembleRelease -PquazyVersionCode="$GITHUB_RUN_NUMBER"
 
-      - name: Verify Release APK, signature and CPU backend libraries
+      - name: Verify Release APK, signature, CPU and Vulkan backend libraries
         shell: bash
         run: |
           set -euo pipefail
