@@ -253,7 +253,7 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
         llama_model_params model_params = llama_model_default_params();
         model_params.n_gpu_layers = gpu_layers;
         model_params.load_mode = use_mmap == JNI_TRUE ? LLAMA_LOAD_MODE_MMAP : LLAMA_LOAD_MODE_NONE;
-        model_params.lazy_mode = use_mmap == JNI_TRUE ? LLAMA_LAZY_MODE_AUTO : LLAMA_LAZY_MODE_OFF;
+        // The PrismML fork uses load_mode only; lazy_mode was removed.
 
         QLOGE("Loading GGUF: requested_ctx=%d threads=%d batch_threads=%d gpu_layers=%d mmap=%d",
               requested_context_size, threads, threads_batch, gpu_layers, use_mmap == JNI_TRUE ? 1 : 0);
