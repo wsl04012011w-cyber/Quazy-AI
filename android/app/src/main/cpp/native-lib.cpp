@@ -300,7 +300,8 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
         g_threads = threads;
         g_threads_batch = threads_batch;
         g_last_error.clear();
-        return to_jstring(env, "OK:Modelo carregado • CPU • " +
+        return to_jstring(env, "OK:Modelo carregado • " +
+            (gpu_layers > 0 ? "GPU/Vulkan (" + std::to_string(gpu_layers) + " camadas)" : "CPU") + " • " +
             std::to_string(threads) + " threads geração / " +
             std::to_string(threads_batch) + " threads prompt • contexto " +
             std::to_string(ctx_size));
