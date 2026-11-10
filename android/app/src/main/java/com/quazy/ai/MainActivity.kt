@@ -23,7 +23,12 @@ class MainActivity : ReactActivity() {
         val content = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            // Apply the larger bottom inset: navigation bar when idle, keyboard
+            // when the IME is visible. This keeps the composer above the keyboard
+            // without stacking Android's resize with React Native's KAV offset.
+            val bottomInset = maxOf(bars.bottom, ime.bottom)
+            view.setPadding(bars.left, bars.top, bars.right, bottomInset)
             insets
         }
         ViewCompat.requestApplyInsets(content)
