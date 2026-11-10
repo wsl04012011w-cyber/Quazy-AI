@@ -820,7 +820,7 @@ export default function App() {
               ) : (
                 <View style={s.gpuCard}>
                   <Text style={s.settingName}>Camadas GPU: 0 · CPU-only</Text>
-                  <Text style={s.settingHint}>Este APK não inclui um backend GPU validado. OpenCL/Vulkan permanecem desligados; o offload não pode ser ativado neste build.</Text>
+                  <Text style={s.settingHint}>Este aparelho ou driver não disponibilizou um dispositivo Vulkan compatível. O Quazy continuará usando CPU; o offload será habilitado automaticamente quando houver suporte.</Text>
                 </View>
               )}
 
