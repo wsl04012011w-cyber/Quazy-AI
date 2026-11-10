@@ -10,6 +10,12 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG" CACHE STRING "" FORCE)
 
 include(FetchContent)
 
+# Android NDK toolchains restrict package discovery to the sysroot, so the
+# host-installed SPIRV-Headers package must be passed explicitly by CI.
+if(DEFINED ENV{SPIRV_HEADERS_CMAKE_DIR})
+    set("SPIRV-Headers_DIR" "$ENV{SPIRV_HEADERS_CMAKE_DIR}" CACHE PATH "SPIRV-Headers CMake package directory" FORCE)
+endif()
+
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
