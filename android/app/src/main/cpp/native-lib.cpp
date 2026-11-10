@@ -22,6 +22,7 @@ std::mutex g_mutex;
 llama_model * g_model = nullptr;
 llama_context * g_context = nullptr;
 bool g_backend_initialized = false;
+bool g_backends_loaded = false;
 int32_t g_prompt_tokens = 0;
 int32_t g_generated_tokens = 0;
 int32_t g_gpu_layers_used = 0;
@@ -167,15 +168,26 @@ ggml_type cache_type_from_int(jint value) {
         default: return GGML_TYPE_F16;
     }
 }
-} // namespace
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_quazy_ai_NativeBridge_nativeGpuBackendAvailable(JNIEnv *, jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex);
+void initialize_backends(const std::string & backend_dir) {
+    // Load ggml dynamic backends from Android's nativeLibraryDir before
+    // asking llama.cpp whether GPU offload is supported. Android's app_process
+    // path is not a reliable backend search directory.
+    if (!g_backends_loaded && !backend_dir.empty()) {
+        ggml_backend_load_all_from_path(backend_dir.c_str());
+        g_backends_loaded = true;
+    }
     if (!g_backend_initialized) {
         llama_backend_init();
         g_backend_initialized = true;
     }
+}
+} // namespace
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_quazy_ai_NativeBridge_nativeGpuBackendAvailable(JNIEnv * env, jobject, jstring backend_dir_value) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    initialize_backends(from_jstring(env, backend_dir_value));
     return llama_supports_gpu_offload() ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -209,18 +221,8 @@ Java_com_quazy_ai_NativeBridge_nativeLoadModel(
     }
 
     try {
-        if (!g_backend_initialized) {
-            llama_backend_init();
-            g_backend_initialized = true;
-        }
-
-        // Dynamic CPU backends are packaged in Android's nativeLibraryDir.
-        // The default llama.cpp search path based on /proc/self/exe does not
-        // reliably point there for an Android app_process runtime.
         const std::string backend_dir = from_jstring(env, backend_dir_value);
-        if (!backend_dir.empty()) {
-            ggml_backend_load_all_from_path(backend_dir.c_str());
-        }
+        initialize_backends(backend_dir);
 
         const ggml_backend_reg_t cpu_backend = ggml_backend_reg_by_name("CPU");
         if (cpu_backend == nullptr) {
