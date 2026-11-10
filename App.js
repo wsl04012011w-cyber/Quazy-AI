@@ -520,7 +520,7 @@ export default function App() {
   const ubatchOptions = [32, 64, 128, 256].filter(value => value <= settings.batchSize);
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
+    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={s.header}>
         <View style={s.logo}><Text style={s.logoText}>Q</Text></View>
