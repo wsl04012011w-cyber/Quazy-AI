@@ -175,7 +175,7 @@ export default function App() {
         toValue: 1,
         duration: 180,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: false,
+        useNativeDriver: true,
       }),
       Animated.timing(dotBounce, {
         toValue: 0,
@@ -250,7 +250,7 @@ export default function App() {
           setMessages(current => current.map(item =>
             item.id === active.messageId ? {...item, text: item.text + chunk, streaming: true} : item,
           ));
-        }, 32);
+        }, 50);
       }
     });
     return () => subscription.remove();
