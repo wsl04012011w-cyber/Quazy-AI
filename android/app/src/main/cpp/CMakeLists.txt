@@ -16,6 +16,13 @@ if(DEFINED ENV{SPIRV_HEADERS_CMAKE_DIR})
     set("SPIRV-Headers_DIR" "$ENV{SPIRV_HEADERS_CMAKE_DIR}" CACHE PATH "SPIRV-Headers CMake package directory" FORCE)
 endif()
 
+# SPIRV-Headers is installed for the Vulkan backend, but its CMake package
+# does not propagate the include root to ggml-vulkan in this Android build.
+# Add it explicitly so <spirv/unified1/spirv.hpp> resolves for the NDK compiler.
+if(DEFINED ENV{SPIRV_HEADERS_INCLUDE_DIR})
+    include_directories("$ENV{SPIRV_HEADERS_INCLUDE_DIR}")
+endif()
+
 # Vulkan's ggml backend includes the header-only Vulkan-Hpp C++ bindings.
 # Supply their host-side headers explicitly to the Android cross-compiler.
 if(DEFINED ENV{VULKAN_HPP_INCLUDE_DIR})

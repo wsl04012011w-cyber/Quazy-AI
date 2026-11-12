@@ -64,6 +64,8 @@ jobs:
           cmake --build "$RUNNER_TEMP/SPIRV-Headers-build" --target install --parallel 2
           echo "CMAKE_PREFIX_PATH=$RUNNER_TEMP/spirv-headers-install" >> "$GITHUB_ENV"
           echo "SPIRV_HEADERS_CMAKE_DIR=$RUNNER_TEMP/spirv-headers-install/share/cmake/SPIRV-Headers" >> "$GITHUB_ENV"
+          test -f "$RUNNER_TEMP/spirv-headers-install/include/spirv/unified1/spirv.hpp"
+          echo "SPIRV_HEADERS_INCLUDE_DIR=$RUNNER_TEMP/spirv-headers-install/include" >> "$GITHUB_ENV"
 
       - name: Install Vulkan-Hpp C++ headers
         shell: bash
